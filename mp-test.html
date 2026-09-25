@@ -23,7 +23,6 @@
   .last{text-align:center;color:var(--dim);min-height:1.4em}
   .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   input{font:inherit;background:#1b2230;color:var(--ink);border:1px solid #3a4660;border-radius:10px;padding:10px;flex:1;min-width:0}
-  .code{font:700 20px ui-monospace,Menlo,monospace;letter-spacing:2px;color:var(--gold)}
   ul{list-style:none;padding:0;margin:8px 0 0}
   li{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid #313b52}
   li:first-child{border-top:0}
@@ -33,42 +32,33 @@
   .log{font:12px ui-monospace,Menlo,monospace;color:var(--dim);max-height:140px;overflow:auto;white-space:pre-wrap}
   .flash{animation:flash .5s}
   @keyframes flash{from{background:#4d5f86}to{background:var(--card)}}
-  [hidden]{display:none!important}
 </style>
 </head>
 <body>
 <main>
   <h1>Terrace World · Multiplayer Test</h1>
-  <p class="sub">One device hosts, the others join. Press the button and every device should see it.</p>
+  <p class="sub">Everyone who opens this link is in the same room. Press the button and every device should see it.</p>
 
   <section class="card">
     <div class="row">
       <label for="name" style="color:var(--dim)">Your name</label>
       <input id="name" maxlength="16" placeholder="Dreamer Frog">
     </div>
-    <p class="status" id="status">Not connected.</p>
-    <div id="lobby" class="row">
-      <button class="btn" id="hostBtn">Host a game</button>
-      <input id="joinCode" placeholder="Room code" maxlength="6" style="text-transform:uppercase">
-      <button class="btn" id="joinBtn">Join</button>
-    </div>
-    <div id="share" hidden>
-      <p style="margin:12px 0 4px">Room <span class="code" id="codeOut"></span></p>
-      <div class="row">
-        <input id="linkOut" readonly>
-        <button class="btn" id="copyBtn">Copy link</button>
-      </div>
+    <p class="status" id="status">Connecting…</p>
+    <div class="row">
+      <input id="linkOut" readonly>
+      <button class="btn" id="copyBtn">Copy link</button>
     </div>
   </section>
 
   <section class="card" id="game">
-    <button class="big" id="press" disabled>It works!</button>
+    <button class="big" id="press">It works!</button>
     <p class="count" id="count">0</p>
     <p class="last" id="last"></p>
   </section>
 
   <section class="card">
-    <strong>Players</strong> <span id="ping" style="color:var(--dim);font-size:13px"></span>
+    <strong>Players</strong>
     <ul id="players"></ul>
   </section>
 
@@ -78,142 +68,98 @@
   </section>
 </main>
 
-<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script>
-(() => {
-  const PREFIX = 'terrace-world-mp-';
+<script type="module">
+  import {joinRoom, selfId} from 'https://cdn.jsdelivr.net/npm/trystero@0.25.4/+esm';
+  window.__mpLoaded = true;
+
+  const APP_ID = 'frog-dex-terrace-world';
+  const ROOM = 'lobby';
   const COLORS = ['#f2c14e','#6fcf7f','#7fb6ff','#ef6b5b','#c58cf2','#5fd6d0','#ff9d5c','#e8e8e8'];
   const $ = id => document.getElementById(id);
   const log = m => { const el=$('log'); el.textContent = `${new Date().toLocaleTimeString()}  ${m}\n` + el.textContent; };
   const setStatus = (m, cls='') => { $('status').textContent = m; $('status').className = 'status ' + cls; };
   const myName = () => ($('name').value.trim() || 'Player').slice(0,16);
-  const newCode = () => Array.from({length:6},()=> 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random()*31)]).join('');
+  const colorFor = id => COLORS[[...id].reduce((h,c) => (h*31 + c.charCodeAt(0)) >>> 0, 7) % COLORS.length];
 
   try { $('name').value = localStorage.getItem('mpName') || ''; } catch(e) {}
-  $('name').addEventListener('change', () => {
-    try { localStorage.setItem('mpName', myName()); } catch(e) {}
-    if (isHost) { state.players[peer.id].name = myName(); broadcast(); render(); }
-    else if (hostConn && hostConn.open) hostConn.send({t:'hello', name: myName()});
-  });
+  $('linkOut').value = location.href.split('?')[0].split('#')[0];
 
-  if (typeof Peer === 'undefined') {
-    setStatus('Could not load the networking library (PeerJS). Check the internet connection.', 'bad');
-    return;
-  }
-
-  let peer = null, isHost = false, hostConn = null;
-  const conns = new Map();                       // host side: peerId -> DataConnection
-  let state = { count: 0, last: null, players: {} };
+  let count = 0, last = '';
+  const names = {};                                  // peerId -> name, for everyone else in the room
 
   function render() {
-    $('count').textContent = state.count;
-    $('last').textContent = state.last ? `${state.last} pressed it` : '';
+    $('count').textContent = count;
+    $('last').textContent = last ? `${last} pressed it` : '';
     const ul = $('players'); ul.innerHTML = '';
-    Object.entries(state.players).forEach(([id,p]) => {
+    const rows = [[selfId, myName() + ' · you'], ...Object.entries(names)];
+    rows.forEach(([id, label]) => {
       const li = document.createElement('li');
-      li.innerHTML = `<span class="dot" style="background:${p.color}"></span><span></span>`;
-      li.lastChild.textContent = p.name + (p.host ? ' (host)' : '') + (peer && id === peer.id ? ' · you' : '');
+      li.innerHTML = '<span class="dot"></span><span></span>';
+      li.firstChild.style.background = colorFor(id);
+      li.lastChild.textContent = label;
       ul.appendChild(li);
     });
+    const others = Object.keys(names).length;
+    if (others) setStatus(`Connected · ${others + 1} players here.`, 'ok');
+    else setStatus('You\'re in. Waiting for others: send them this link.', 'ok');
   }
   function flash() { const g=$('game'); g.classList.remove('flash'); void g.offsetWidth; g.classList.add('flash'); }
-  function ready(msg) { $('press').disabled = false; $('lobby').hidden = true; setStatus(msg, 'ok'); }
 
-  // ---------- HOST ----------
-  function broadcast() { for (const c of conns.values()) if (c.open) c.send({t:'state', state}); }
-  function hostPress(name) { state.count++; state.last = name; broadcast(); render(); flash(); }
+  const room = joinRoom({appId: APP_ID}, ROOM, {
+    onJoinError: d => { setStatus('Could not join the room. Reload to try again.', 'bad'); log('join error ' + JSON.stringify(d)); }
+  });
+  const hello = room.makeAction('hello');
+  const press = room.makeAction('press');
 
-  function host() {
-    const code = newCode();
-    setStatus('Creating room…');
-    peer = new Peer(PREFIX + code, { debug: 1 });
-    peer.on('open', id => {
-      isHost = true;
-      state.players[id] = { name: myName(), color: COLORS[0], host: true };
-      $('codeOut').textContent = code;
-      const link = location.href.split('?')[0].split('#')[0] + '?room=' + code;
-      $('linkOut').value = link; $('share').hidden = false;
-      ready('Hosting. Open the link on another device (or another tab) to join.');
-      log('room ' + code + ' is open');
-      render();
-    });
-    peer.on('connection', c => {
-      c.on('open', () => {
-        conns.set(c.peer, c);
-        const color = COLORS[Object.keys(state.players).length % COLORS.length];
-        state.players[c.peer] = { name: 'Joining…', color };
-        log('a device connected'); broadcast(); render();
-      });
-      c.on('data', d => {
-        if (!d || typeof d !== 'object') return;
-        if (d.t === 'hello' && state.players[c.peer]) {
-          state.players[c.peer].name = String(d.name || 'Player').slice(0,16);
-          log(state.players[c.peer].name + ' joined'); broadcast(); render();
-        } else if (d.t === 'press') {
-          hostPress(state.players[c.peer] ? state.players[c.peer].name : 'Someone');
-        } else if (d.t === 'ping') {
-          c.send({t:'pong', ts: d.ts});
-        }
-      });
-      c.on('close', () => {
-        const p = state.players[c.peer];
-        conns.delete(c.peer); delete state.players[c.peer];
-        log((p ? p.name : 'A player') + ' left'); broadcast(); render();
-      });
-    });
-    peer.on('error', e => {
-      if (e.type === 'unavailable-id') { log('code clash, retrying'); peer.destroy(); host(); return; }
-      setStatus('Error: ' + e.type, 'bad'); log('error ' + e.type);
-    });
-  }
-
-  // ---------- CLIENT ----------
-  function join(code) {
-    code = code.trim().toUpperCase();
-    if (!code) return;
-    setStatus('Joining room ' + code + '…');
-    peer = new Peer({ debug: 1 });
-    peer.on('open', () => {
-      hostConn = peer.connect(PREFIX + code, { reliable: true });
-      hostConn.on('open', () => {
-        hostConn.send({t:'hello', name: myName()});
-        $('codeOut').textContent = code; $('linkOut').value = location.href; $('share').hidden = false;
-        ready('Connected to room ' + code + '.');
-        log('joined room ' + code);
-        setInterval(() => { if (hostConn.open) hostConn.send({t:'ping', ts: performance.now()}); }, 2000);
-      });
-      hostConn.on('data', d => {
-        if (d && d.t === 'state') {
-          const bumped = d.state.count !== state.count;
-          state = d.state; render(); if (bumped) flash();
-        } else if (d && d.t === 'pong') {
-          $('ping').textContent = '· ping ' + Math.round(performance.now() - d.ts) + ' ms';
-        }
-      });
-      hostConn.on('close', () => { setStatus('The host left. Room closed.', 'bad'); $('press').disabled = true; log('host left'); });
-    });
-    peer.on('error', e => {
-      const msg = e.type === 'peer-unavailable' ? 'No room with that code. Check it, or ask the host to open one.' : 'Error: ' + e.type;
-      setStatus(msg, 'bad'); log('error ' + e.type);
-      $('lobby').hidden = false;
-    });
-  }
-
-  $('hostBtn').onclick = host;
-  $('joinBtn').onclick = () => join($('joinCode').value);
-  $('press').onclick = () => {
-    if (isHost) hostPress(myName());
-    else if (hostConn && hostConn.open) hostConn.send({t:'press'});
+  room.onPeerJoin = peerId => {
+    if (!names[peerId]) names[peerId] = 'Joining…';
+    hello.send({name: myName(), count}, {target: peerId});
+    render();
   };
+  room.onPeerLeave = peerId => {
+    log((names[peerId] || 'A player') + ' left');
+    delete names[peerId];
+    render();
+  };
+  hello.onMessage = (data, {peerId}) => {
+    if (!data || typeof data !== 'object') return;
+    const isNew = !names[peerId] || names[peerId] === 'Joining…';
+    names[peerId] = String(data.name || 'Player').slice(0,16);
+    if (Number.isFinite(data.count) && data.count > count) count = data.count;
+    if (isNew) log(names[peerId] + ' joined');
+    render();
+  };
+  press.onMessage = (data, {peerId}) => {
+    count++; last = names[peerId] || 'Someone';
+    render(); flash();
+  };
+
+  $('press').onclick = () => {
+    count++; last = myName();
+    press.send({});
+    render(); flash();
+  };
+  $('name').addEventListener('change', () => {
+    try { localStorage.setItem('mpName', myName()); } catch(e) {}
+    hello.send({name: myName(), count});
+    render();
+  });
   $('copyBtn').onclick = async () => {
     try { await navigator.clipboard.writeText($('linkOut').value); $('copyBtn').textContent = 'Copied'; }
     catch(e) { $('linkOut').select(); }
   };
 
-  const room = new URLSearchParams(location.search).get('room');
-  if (room) { $('joinCode').value = room; join(room); }
+  log('joined the room');
   render();
-})();
+</script>
+<script>
+  setTimeout(() => {
+    if (!window.__mpLoaded) {
+      const s = document.getElementById('status');
+      s.textContent = 'Could not load the networking library. Check the internet connection.';
+      s.className = 'status bad';
+    }
+  }, 8000);
 </script>
 </body>
 </html>

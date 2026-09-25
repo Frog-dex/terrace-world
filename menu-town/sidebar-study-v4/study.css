@@ -1,0 +1,78 @@
+/* Prepared by: Codex. Motion-study controls and a shared main-menu scene mode. */
+:root{color-scheme:dark;--surface:#171411;--ink:#ebdfd1;--study-width:520px}
+body{display:grid;grid-template-columns:minmax(400px,1fr) clamp(360px,24vw,620px);align-items:start;gap:28px;min-height:100svh;padding:24px;background:var(--surface)}
+main{width:100%;margin:0;padding:0;min-height:0;position:sticky;top:24px}
+.town-backdrop{display:none}
+.town-view{grid-template-columns:minmax(400px,1fr) clamp(360px,24vw,620px)}
+.town-view main{isolation:isolate;background:#171411}
+.town-view .drawn-menu{width:100%;max-width:none;aspect-ratio:3/2;margin:0}
+.town-view .drawn-menu>svg{width:100%;height:100%;position:absolute;inset:0}
+.study-heading{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;margin:0}
+.drawn-menu{width:var(--study-width);margin-inline:auto}
+.nameplate{pointer-events:none}
+.nameplate-supports path{fill:url(#case-side);stroke:#6d442d;stroke-width:1.5;stroke-linejoin:round}
+.nameplate-supports .support-light{fill:none;stroke:#dcb48c;stroke-width:1.5;stroke-linecap:round}
+.nameplate-side{fill:#74492f;stroke:#482d21;stroke-width:2.5;stroke-linejoin:round}
+.nameplate-face{fill:url(#nameplate-metal);stroke:url(#edge);stroke-width:3.4;stroke-linejoin:round}
+.nameplate-lip{fill:none;stroke:#e6bf98;stroke-width:1.25;stroke-linecap:round}
+.menu-shell{transition:none!important;transform-origin:50% 0;transform-box:fill-box;backface-visibility:hidden;will-change:transform}
+.globe-well{position:absolute;left:8.235294%;top:24.207493%;width:80%;height:auto;aspect-ratio:1;z-index:1;background:#211810;visibility:hidden}
+.study-open .globe-well{visibility:visible}
+.study-open .menu-shell{visibility:hidden;opacity:1;transform:none}
+.study-open .choices a{pointer-events:none}
+.belt-teeth,.motor-wheel{animation:none!important}
+.motor-wheel{transform-box:view-box;transform-origin:0 0}
+.hinge{fill:url(#case-side);stroke:url(#edge);stroke-width:2}
+.study-controls{width:100%;max-width:100%;font:clamp(17px,1.25vw,32px)/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.study-controls h2{font-size:24px;font-weight:550;margin:0 0 10px;color:#f2e6d6}
+.study-controls p{margin:0 0 14px;color:#d8cabc}
+.play-controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0;padding:0;border:0;min-width:0}
+.study-controls button{font:inherit;color:#f3e7d8;background:#443124;border:1px solid #987250;border-radius:3px;padding:8px 9px;cursor:pointer}
+.study-controls button:hover:not(:disabled){background:#60432f}
+.study-controls button:disabled{color:#968678;border-color:#544337;background:#29211b;cursor:default}
+.study-controls :is(button,a,input):focus-visible{outline:2px solid #f1c99d;outline-offset:4px}
+.study-controls #study-status{min-height:42px;margin:10px 0;color:#efd9bc;font-size:14px}
+.study-controls label{display:flex;justify-content:space-between;gap:10px;color:#ebdfd1}
+.study-controls output{font-variant-numeric:tabular-nums;color:#cfb18b}
+.study-controls input[type=range]{display:block;width:100%;height:20px;margin:4px 0 10px;accent-color:#d2a477;cursor:pointer}
+.study-controls .check-control{justify-content:flex-start;align-items:center;gap:9px;margin:0 0 12px;cursor:pointer}
+.check-control input{width:18px;height:18px;margin:0;accent-color:#d2a477}
+.check-control span{margin-left:auto;font-size:13px;color:#c7ad90}
+.experiment-controls{display:grid;grid-template-columns:1fr 1fr;column-gap:22px;border:0;padding:0;margin:0 0 20px;min-width:0}
+.experiment-controls legend{font-size:18px;font-weight:600;margin-bottom:10px;padding:0;color:#f2e6d6}
+.adjustment{min-width:0}
+.adjustment label{font-size:15px;flex-wrap:wrap;gap:3px}
+.adjustment output{white-space:nowrap}
+.timeline-adjustment,.experiment-controls #reset{grid-column:1/-1}
+.timeline-adjustment label{font-size:15px}
+.experiment-controls #reset{width:100%;margin-top:2px}
+.study-controls .study-note{font-size:13px;margin-bottom:16px;color:#b2a295}
+.study-controls a{color:#e6c49a;text-underline-offset:4px}
+.study-controls .backdrop-control{display:block;margin:0 0 10px}
+.backdrop-control select{display:block;width:100%;margin-top:6px;padding:9px;font:inherit;color:#f3e7d8;background:#33281f;border:1px solid #987250;border-radius:3px}
+.study-controls #town-film-status{margin:0 0 10px}
+/* The original SVG remains the working fallback and the accessible hit surface.
+   It is made transparent only after the complete 3D assembly renders. */
+.assembly-scene{position:absolute;inset:0;pointer-events:none;z-index:1}
+.assembly-scene canvas{display:block;width:100%;height:100%}
+.scene-ready>svg{z-index:2}
+.scene-ready>svg>.nameplate,.scene-ready>svg>.curl,.scene-ready>svg>.case-side,.scene-ready>svg>.face,.scene-ready>svg>.engraving{visibility:hidden}
+.scene-ready .choices .hit{fill:transparent;stroke:transparent}
+.scene-ready .choices text{display:none}
+.scene-ready .choices a:hover .hit,.scene-ready .choices a:focus-visible .hit{fill:#f2cca81a;stroke:#3b2117;stroke-width:2}
+.scene-ready .choices a:hover text,.scene-ready .choices a:focus-visible text{fill:transparent}
+.scene-ready.study-open .choices{visibility:hidden}
+.scene-ready .choices{clip-path:none}
+.study-controls [hidden]{display:none!important}
+@media(min-width:1900px){.study-controls h2{font-size:40px}.study-controls #study-status,.adjustment label,.timeline-adjustment label{font-size:26px}.experiment-controls legend{font-size:30px}.study-controls .study-note,.check-control span{font-size:22px}.study-controls button{padding:12px}.check-control input{width:28px;height:28px}.study-controls input[type=range]{height:30px;margin:8px 0 18px}.experiment-controls{column-gap:26px}}
+@media(max-width:1050px){body{display:block;padding:18px 18px 36px}main{position:relative;top:auto;width:100%;margin:auto;min-height:0}.drawn-menu{max-width:100%}.study-controls{margin:28px auto 0;width:min(100%,760px)}.study-controls .play-controls{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:600px){.study-controls .play-controls{grid-template-columns:1fr 1fr}.town-view .drawn-menu{min-width:640px}.town-view main{overflow:auto}.study-controls{font-size:17px}}
+@media(max-width:390px){.experiment-controls{grid-template-columns:1fr}.adjustment label{font-size:14px}}
+@media(max-width:600px){.town-view .town-backdrop{object-position:85% 50%}}
+/* The same renderer fills the actual production viewport. The host owns destination
+   dialogs, Website/History and the existing corner radio; no debug UI leaks. */
+.main-menu-embed,.main-menu-embed body{width:100%;height:100%;min-height:0;overflow:hidden}
+.main-menu-embed body{display:block;padding:0;background:#b7c9d7}
+.main-menu-embed main,.main-menu-embed .town-view main{position:relative;top:auto;isolation:isolate;width:100%;height:100%;margin:0;padding:0;overflow:hidden}
+.main-menu-embed .drawn-menu,.main-menu-embed .town-view .drawn-menu{position:relative;inset:auto;width:100%;height:100%;min-width:0;max-width:none;aspect-ratio:auto;margin:0}
+.main-menu-embed .study-controls{display:none}

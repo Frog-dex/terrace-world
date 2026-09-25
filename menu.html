@@ -1,0 +1,108 @@
+<!doctype html>
+<!-- Prepared by: Codex. Blu's drawn menu, with placement guides excluded. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Spirit Striker</title>
+  <link rel="stylesheet" href="menu.css?v=right-corner-4">
+  <link rel="stylesheet" href="menu-scene.css?v=native-town-13">
+  <script src="menu.js?v=main-app-14-radio" defer></script>
+</head>
+<body class="menu-app">
+  <div id="menu-scene-stage" class="menu-scene-stage" aria-label="Spirit Striker school street">
+    <iframe id="menu-scene-frame" title="Spirit Striker mechanical menu in the school town" src="menu-town/sidebar-study-v4/index.html?embed=main-menu&amp;v=native-town-13" allow="autoplay" tabindex="-1" aria-hidden="true"></iframe>
+  </div>
+  <nav class="street-view-controls" aria-label="Look along the street">
+    <button type="button" data-street-view="sign" aria-pressed="true">Sign</button>
+    <button type="button" data-street-view="school" aria-pressed="false">School</button>
+  </nav>
+  <main id="menu-fallback">
+    <h1 class="brand"><img src="images/brand/spirit-striker-wordmark-original-letter-shapes-v11.png" alt="Spirit Striker"></h1>
+    <nav class="drawn-menu" aria-label="Main menu">
+      <svg viewBox="0 0 340 550" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="Curved menu choices">
+        <title id="menu-title">Spirit Striker main menu</title>
+        <defs>
+          <!-- Gently balanced, not an ideal circle. The source's lower curl remains. -->
+          <path id="face" d="M162 24 C238 20 299 83 300 159 C300 233 242 287 166 289 C91 292 30 237 28 163 C25 89 86 26 162 24 Z"/>
+          <clipPath id="face-clip"><use href="#face"/></clipPath>
+          <path id="play-arc" d="M74 106 Q160 38 250 106"/>
+          <path id="radio-arc" d="M58 153 Q160 76 272 155"/>
+          <path id="learn-arc" d="M57 204 Q164 131 280 204"/>
+          <path id="shop-arc" d="M84 249 Q164 186 255 248"/>
+          <path id="intro-arc" d="M117 276 Q165 244 211 276"/>
+          <!-- Snowberry watch-dial metal.css: fixed light, polished lips and
+               dark sidewalls, translated to copper without replacing Blu's shape. -->
+          <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
+            <stop stop-color="#e5bc96"/><stop offset=".21" stop-color="#b57e57"/><stop offset=".37" stop-color="#dca879"/><stop offset=".49" stop-color="#f1caa3"/><stop offset=".56" stop-color="#cf996e"/><stop offset=".78" stop-color="#b47b52"/><stop offset="1" stop-color="#885335"/>
+          </linearGradient>
+          <linearGradient id="metal-active" x1="0" y1="0" x2="0" y2="1">
+            <stop stop-color="#f3d5b4"/><stop offset=".55" stop-color="#dca77f"/><stop offset="1" stop-color="#b4774d"/>
+          </linearGradient>
+          <linearGradient id="edge" x1="0" y1="0" x2=".8" y2="1">
+            <stop stop-color="#613c29"/><stop offset=".13" stop-color="#f9dbb8"/><stop offset=".27" stop-color="#a76a46"/><stop offset=".42" stop-color="#45291e"/><stop offset=".53" stop-color="#f3c79b"/><stop offset=".64" stop-color="#b97e51"/><stop offset=".84" stop-color="#683c29"/><stop offset="1" stop-color="#2e1b14"/>
+          </linearGradient>
+          <linearGradient id="case-side" x1="0" y1="0" x2="1" y2="0">
+            <stop stop-color="#3b241b"/><stop offset=".2" stop-color="#a87550"/><stop offset=".44" stop-color="#482c20"/><stop offset=".72" stop-color="#bb855a"/><stop offset="1" stop-color="#342018"/>
+          </linearGradient>
+          <pattern id="case-grain" width="340" height="550" patternUnits="userSpaceOnUse">
+            <rect width="340" height="550" fill="url(#metal)"/>
+            <image href="assets/menu-scene-v1/snowberry-black-metal.png" width="340" height="550" opacity=".07" preserveAspectRatio="xMidYMid slice"/>
+          </pattern>
+        </defs>
+        <path class="curl" d="M285 216 C277 246 252 278 223 305 C180 345 130 390 111 438 C98 470 103 495 125 509 C153 528 195 520 218 499 C240 479 249 453 239 433 C229 414 202 408 180 415 C151 424 137 445 139 463 C140 478 152 485 166 481 C179 478 182 468 177 459 C171 450 160 448 151 455 C144 460 145 470 151 477 C133 473 135 451 146 427 C163 389 197 355 227 322 C264 282 290 247 294 216 Z"/>
+        <use href="#face" class="case-side" transform="translate(2 7)" aria-hidden="true"/>
+        <use href="#face" class="face"/>
+        <g clip-path="url(#face-clip)" class="choices">
+          <a href="play-launch.html?v=terrace-1&amp;embed=menu" data-destination="play" aria-label="Play" data-note="Enter the Spirit Striker portal">
+            <path class="hit" d="M0 0H340V125L282 121C223 64 87 65 44 119H0Z"/>
+            <text><textPath href="#play-arc" startOffset="50%">Play</textPath></text>
+          </a>
+          <a href="https://wiserockfish.com/" data-destination="radio" aria-label="Radio" data-note="Go to Wise Rock Fish Radio at wiserockfish.com">
+            <path class="hit" d="M0 119H44C87 65 223 64 282 121H340V170H291C224 116 87 117 38 171H0Z"/>
+            <text><textPath href="#radio-arc" startOffset="50%">Radio</textPath></text>
+          </a>
+          <a href="library.html?v=library-clean-4" data-destination="learn" aria-label="Learn" data-note="Read the Spirit Striker library">
+            <path class="hit" d="M0 171H38C87 117 224 116 291 170H340V216H278C224 166 100 172 54 222H0Z"/>
+            <text><textPath href="#learn-arc" startOffset="50%">Learn</textPath></text>
+          </a>
+          <a href="store-book/index.html" data-destination="shop" aria-label="Shop" data-note="Preview the Spirit Strikers book.">
+            <path class="hit" d="M0 222H54C100 172 224 166 278 216H340V258H237C200 226 134 229 94 263H0Z"/>
+            <text><textPath href="#shop-arc" startOffset="50%">Shop</textPath></text>
+          </a>
+          <a href="intro-sequence.html?cut=earth-energy&amp;v=main-app-13&amp;embed=menu" data-destination="intro" aria-label="Intro" data-note="Replay the current opening sequence">
+            <path class="hit" d="M0 263H94C134 229 200 226 237 258H340V340H0Z"/>
+            <text class="intro-label"><textPath href="#intro-arc" startOffset="50%">Intro</textPath></text>
+          </a>
+        </g>
+        <g class="engraving" aria-hidden="true">
+          <use href="#face"/>
+          <path d="M161 31C234 28 291 86 292 159C292 230 237 279 165 281C93 284 38 232 36 163C32 94 90 33 161 31Z"/>
+          <path d="M44 119C87 65 223 64 282 121 M38 171C87 117 224 116 291 170 M54 222C100 172 224 166 278 216 M94 263C134 229 200 226 237 258"/>
+        </g>
+      </svg>
+      <div class="globe-well" aria-hidden="true"></div>
+    </nav>
+    <p id="menu-note" class="menu-note" aria-live="polite">Choose where to go.</p>
+  </main>
+  <button id="sign-motion" class="sign-motion" type="button" aria-pressed="false" hidden>Animate sign</button>
+  <button class="site-version" type="button" data-version="1.00" data-build="2026.09.20.1" aria-label="Spirit Striker version 1.00. Open updates and version history.">
+    <img class="app-seal" src="images/brand/spirit-striker-seal-navy-gold-v2-256.png" alt="">
+  </button>
+  <dialog id="destination" aria-labelledby="destination-title">
+    <header class="destination-bar">
+      <h2 id="destination-title"></h2>
+      <details id="destination-menu">
+        <summary aria-label="Open navigation">Menu</summary>
+        <nav aria-label="Page navigation">
+          <button type="button" id="back-to-menu">Back to menu</button>
+          <button type="button" id="reload-page">Restart page</button>
+        </nav>
+      </details>
+    </header>
+    <p id="destination-status" role="status">Opening…</p>
+    <iframe id="destination-frame" title="Selected Spirit Striker page" allow="autoplay; fullscreen" src="about:blank"></iframe>
+    <iframe id="radio-frame" title="Wise Rock Fish Radio" allow="autoplay" src="about:blank" hidden></iframe>
+  </dialog>
+</body>
+</html>

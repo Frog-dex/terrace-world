@@ -1,0 +1,175 @@
+<!doctype html>
+<!-- Prepared by: Codex. Blu's drawn menu, with placement guides excluded. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Spirit Striker · Sidebar motion study</title>
+  <link rel="stylesheet" href="menu-base.css">
+  <script>if(new URLSearchParams(location.search).get('embed')==='main-menu'&&parent!==window)document.documentElement.classList.add('main-menu-embed');</script>
+  <link rel="stylesheet" href="study.css?v=native-town-13">
+  <script type="module" src="mechanism-3d.js?v=native-town-13"></script>
+</head>
+<body>
+  <main>
+    <h1 class="study-heading">Spirit Striker</h1>
+    <nav class="drawn-menu" aria-label="Main menu">
+      <svg viewBox="-16 -156 386 724" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="Spirit Striker engraved nameplate and curved menu choices">
+        <title id="menu-title">Spirit Striker main menu</title>
+        <defs>
+          <path id="nameplate-shape" d="M17 -88 C99 -141 239 -140 315 -90 Q324 -85 319 -75 L289 -9 Q285 -1 277 -5 C212 -35 107 -35 51 -5 Q42 0 38 -10 L11 -73 Q7 -83 17 -88 Z"/>
+          <linearGradient id="nameplate-metal" x1="0" y1="0" x2=".35" y2="1">
+            <stop stop-color="#e2b991"/><stop offset=".35" stop-color="#d0a079"/><stop offset=".74" stop-color="#bd895f"/><stop offset="1" stop-color="#a56f49"/>
+          </linearGradient>
+          <filter id="nameplate-cut" x="-3%" y="-5%" width="106%" height="110%" color-interpolation-filters="sRGB">
+            <feOffset in="SourceAlpha" dy="1.05" result="cut-lip"/>
+            <feFlood flood-color="#f4cfaa" result="lip-colour"/>
+            <feComposite in="lip-colour" in2="cut-lip" operator="in" result="lip"/>
+            <feFlood flood-color="#563623" result="cut-colour"/>
+            <feComposite in="cut-colour" in2="SourceAlpha" operator="in" result="cut"/>
+            <feMerge><feMergeNode in="lip"/><feMergeNode in="cut"/></feMerge>
+          </filter>
+          <!-- Gently balanced, not an ideal circle. The source's lower curl remains. -->
+          <path id="face" d="M162 24 C238 20 299 83 300 159 C300 233 242 287 166 289 C91 292 30 237 28 163 C25 89 86 26 162 24 Z"/>
+          <clipPath id="face-clip"><use href="#face"/></clipPath>
+          <path id="play-arc" d="M74 106 Q160 38 250 106"/>
+          <path id="radio-arc" d="M58 153 Q160 76 272 155"/>
+          <path id="learn-arc" d="M57 204 Q164 131 280 204"/>
+          <path id="shop-arc" d="M84 249 Q164 186 255 248"/>
+          <path id="intro-arc" d="M117 276 Q165 244 211 276"/>
+          <!-- Snowberry watch-dial metal.css: fixed light, polished lips and
+               dark sidewalls, translated to copper without replacing Blu's shape. -->
+          <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
+            <stop stop-color="#e5bc96"/><stop offset=".21" stop-color="#b57e57"/><stop offset=".37" stop-color="#dca879"/><stop offset=".49" stop-color="#f1caa3"/><stop offset=".56" stop-color="#cf996e"/><stop offset=".78" stop-color="#b47b52"/><stop offset="1" stop-color="#885335"/>
+          </linearGradient>
+          <linearGradient id="metal-active" x1="0" y1="0" x2="0" y2="1">
+            <stop stop-color="#f3d5b4"/><stop offset=".55" stop-color="#dca77f"/><stop offset="1" stop-color="#b4774d"/>
+          </linearGradient>
+          <linearGradient id="edge" x1="0" y1="0" x2=".8" y2="1">
+            <stop stop-color="#613c29"/><stop offset=".13" stop-color="#f9dbb8"/><stop offset=".27" stop-color="#a76a46"/><stop offset=".42" stop-color="#45291e"/><stop offset=".53" stop-color="#f3c79b"/><stop offset=".64" stop-color="#b97e51"/><stop offset=".84" stop-color="#683c29"/><stop offset="1" stop-color="#2e1b14"/>
+          </linearGradient>
+          <linearGradient id="case-side" x1="0" y1="0" x2="1" y2="0">
+            <stop stop-color="#3b241b"/><stop offset=".2" stop-color="#a87550"/><stop offset=".44" stop-color="#482c20"/><stop offset=".72" stop-color="#bb855a"/><stop offset="1" stop-color="#342018"/>
+          </linearGradient>
+          <pattern id="case-grain" width="340" height="550" patternUnits="userSpaceOnUse">
+            <rect width="340" height="550" fill="url(#metal)"/>
+            <image href="../../assets/menu-scene-v1/snowberry-black-metal.png" width="340" height="550" opacity=".035" preserveAspectRatio="xMidYMid slice"/>
+          </pattern>
+        </defs>
+        <path class="curl" d="M285 216 C277 246 252 278 223 305 C180 345 130 390 111 438 C98 470 103 495 125 509 C153 528 195 520 218 499 C240 479 249 453 239 433 C229 414 202 408 180 415 C151 424 137 445 139 463 C140 478 152 485 166 481 C179 478 182 468 177 459 C171 450 160 448 151 455 C144 460 145 470 151 477 C133 473 135 451 146 427 C163 389 197 355 227 322 C264 282 290 247 294 216 Z"/>
+        <!-- Fixed crown attachment from IMG_0391.JPG. It is not part of the turning shell. -->
+        <g class="nameplate" role="img" aria-label="Spirit Striker engraved into an arched metal nameplate, attached to the circle by three supports">
+          <g class="nameplate-supports" aria-hidden="true">
+            <path d="M44 -14 L58 -20 L97 62 L80 71 Z"/>
+            <path d="M153 -35 L171 -35 L174 38 L156 38 Z"/>
+            <path d="M272 -20 L286 -14 L255 72 L238 62 Z"/>
+            <path class="support-light" d="M48 -11 L73 34 M157 -31 L159 4 M281 -10 L264 34"/>
+          </g>
+          <use href="#nameplate-shape" class="nameplate-side" transform="translate(0 5)"/>
+          <use href="#nameplate-shape" class="nameplate-face"/>
+          <path class="nameplate-lip" d="M14 -79 C88 -127 240 -135 313 -79 M48 -8 C108 -40 222 -37 280 -8"/>
+          <image class="nameplate-logo" href="../../images/brand/spirit-striker-wordmark-original-letter-shapes-v11.png" x="40" y="-113" width="249" height="86.77" filter="url(#nameplate-cut)"/>
+        </g>
+        <use href="#face" class="case-side" transform="translate(2 7)" aria-hidden="true"/>
+        <use href="#face" class="face"/>
+        <g clip-path="url(#face-clip)" class="choices">
+          <a href="../../menu.html?section=play" data-destination="play" aria-label="Play" data-note="Play section">
+            <path class="hit" d="M0 0H340V125L282 121C223 64 87 65 44 119H0Z"/>
+            <text><textPath href="#play-arc" startOffset="50%">Play</textPath></text>
+          </a>
+          <a href="../../menu.html?section=radio" data-destination="radio" aria-label="Radio" data-note="Open the Snowberry OS radio deck">
+            <path class="hit" d="M0 119H44C87 65 223 64 282 121H340V170H291C224 116 87 117 38 171H0Z"/>
+            <text><textPath href="#radio-arc" startOffset="50%">Radio</textPath></text>
+          </a>
+          <a href="../../menu.html?section=learn" data-destination="learn" aria-label="Learn" data-note="Read the Spirit Striker library">
+            <path class="hit" d="M0 171H38C87 117 224 116 291 170H340V216H278C224 166 100 172 54 222H0Z"/>
+            <text><textPath href="#learn-arc" startOffset="50%">Learn</textPath></text>
+          </a>
+          <a href="../../menu.html?section=shop" data-destination="shop" aria-label="Shop" data-note="Preview the Spirit Strikers book.">
+            <path class="hit" d="M0 222H54C100 172 224 166 278 216H340V258H237C200 226 134 229 94 263H0Z"/>
+            <text><textPath href="#shop-arc" startOffset="50%">Shop</textPath></text>
+          </a>
+          <a href="../../menu.html?section=intro" data-destination="intro" aria-label="Intro" data-note="Replay the current opening sequence">
+            <path class="hit" d="M0 263H94C134 229 200 226 237 258H340V340H0Z"/>
+            <text class="intro-label"><textPath href="#intro-arc" startOffset="50%">Intro</textPath></text>
+          </a>
+        </g>
+        <g class="engraving" aria-hidden="true">
+          <use href="#face"/>
+          <path d="M161 31C234 28 291 86 292 159C292 230 237 279 165 281C93 284 38 232 36 163C32 94 90 33 161 31Z"/>
+          <path d="M44 119C87 65 223 64 282 121 M38 171C87 117 224 116 291 170 M54 222C100 172 224 166 278 216 M94 263C134 229 200 226 237 258"/>
+        </g>
+      </svg>
+      <div class="assembly-scene" aria-hidden="true"></div>
+    </nav>
+    <p id="menu-note" class="menu-note" aria-live="polite">Choose where to go.</p>
+  </main>
+  <aside class="study-controls" aria-label="Sidebar study controls">
+    <h2>Mechanical sidebar</h2>
+    <p>A school-day street, moving clouds and a copper sign mounted in the ground. Move close to return the menu.</p>
+    <fieldset class="play-controls" disabled aria-label="Playback">
+      <button id="earth" type="button">Play Earth</button>
+      <button id="toga" type="button">Play Toga</button>
+      <button id="close" type="button" disabled>Return to menu</button>
+      <button id="pause" type="button" disabled>Pause</button>
+    </fieldset>
+    <p id="study-status" role="status">Loading the mechanical study.</p>
+    <label class="check-control"><input id="auto-cycle" type="checkbox" disabled> Loop when cursor is away <span>Earth / Toga</span></label>
+    <label class="check-control"><input id="town-scene" type="checkbox" checked disabled> Town setting</label>
+    <label class="check-control"><input id="scene-motion" type="checkbox" checked disabled> Animate town and sky</label>
+    <label class="adjustment" for="cloud-speed">Cloud drift <output id="cloud-speed-value">38</output></label>
+    <input id="cloud-speed" type="range" min="0" max="60" value="38" step="1" disabled>
+    <label class="backdrop-control" for="town-backdrop">Background
+      <select id="town-backdrop" disabled><option value="native">Original 3D town</option><option value="film">Higgsfield 30-second loop</option></select>
+    </label>
+    <p id="town-film-status" class="study-note" role="status">Original 3D town is available while the video loads.</p>
+    <label class="check-control"><input id="green-preview" type="checkbox" disabled> Inspect green-screen sky</label>
+    <label class="adjustment" for="town-film-time">Town film <output id="town-film-value">0.0 s</output></label>
+    <input id="town-film-time" type="range" min="0" max="30" value="0" step="0.1" disabled>
+    <label class="check-control"><input id="hide-sign" type="checkbox" disabled> Hide sign for clean background</label>
+    <button id="capture-plate" type="button" disabled>Save background screenshot</button>
+    <fieldset class="experiment-controls" disabled>
+      <legend>Experiment</legend>
+      <div class="adjustment timeline-adjustment">
+      <label for="timeline">Scrub the sequence <output id="timeline-value">0.00 s</output></label>
+      <input id="timeline" type="range" min="0" max="14" value="0" step="0.01" aria-label="Sequence time">
+      </div><div class="adjustment">
+      <label for="width">Assembly size <output id="width-value">640 px</output></label>
+      <input id="width" type="range" min="360" max="640" value="640" step="2">
+      </div><div class="adjustment">
+      <label for="delay">Idle before turning <output id="delay-value">3.6 s</output></label>
+      <input id="delay" type="range" min="0.5" max="5" value="3.6" step="0.1">
+      </div><div class="adjustment">
+      <label for="stagger">Time between bands <output id="stagger-value">0.20 s</output></label>
+      <input id="stagger" type="range" min="0.2" max="1" value="0.2" step="0.05">
+      </div><div class="adjustment">
+      <label for="turn">Each band’s turn <output id="turn-value">0.65 s</output></label>
+      <input id="turn" type="range" min="0.5" max="1.8" value="0.65" step="0.05">
+      </div><div class="adjustment">
+      <label for="sweep">Globe entrance / exit <output id="sweep-value">3.8 s</output></label>
+      <input id="sweep" type="range" min="1" max="4" value="3.8" step="0.1">
+      </div><div class="adjustment">
+      <label for="hold">Globe hold <output id="hold-value">2.0 s</output></label>
+      <input id="hold" type="range" min="1" max="10" value="2" step="0.5">
+      </div><div class="adjustment">
+      <label for="fan-size">Rear fan diameter <output id="fan-size-value">212</output></label>
+      <input id="fan-size" type="range" min="150" max="212" value="212" step="2">
+      </div><div class="adjustment">
+      <label for="speed">Drive speed <output id="speed-value">2.00×</output></label>
+      <input id="speed" type="range" min="0.25" max="2" value="2" step="0.05">
+      </div><div class="adjustment">
+      <label for="view">Inspection angle <output id="view-value">11°</output></label>
+      <input id="view" type="range" min="-28" max="28" value="11" step="1">
+      </div><div class="adjustment">
+      <label for="energy">Portal light <output id="energy-value">85%</output></label>
+      <input id="energy" type="range" min="0.1" max="1.5" value="0.85" step="0.05">
+      </div>
+      <button id="reset" type="button">Reset adjustments</button>
+    </fieldset>
+    <p class="study-note">Metal portal rim, original emblem, two open fans and a rigid vibrating motor. Pause and scrubbing override cursor movement. On touch, tap the sign to return.</p>
+    <p class="study-note">Study v11 · September 19, 2026. This editor and the local main menu share the same scene. <a href="./MECHANISM-V11.md">Changes and source notes</a>.</p>
+    <noscript><p>The static menu above still works. Enable JavaScript to use the animation controls.</p></noscript>
+    <a href="../../menu.html">Back to the main menu</a>
+  </aside>
+</body>
+</html>

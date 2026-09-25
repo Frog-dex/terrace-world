@@ -1,0 +1,28 @@
+/* Prepared by: Codex. One shared town/sign renderer; no duplicated scene. */
+html,body{height:100%;overflow:hidden}
+.menu-scene-stage{position:fixed;inset:0;z-index:1;display:block;overflow:hidden;background:#272621;visibility:hidden}
+#menu-scene-frame{display:block;width:100%;height:100%;border:0;background:#b7c9d7}
+.menu-scene-ready .menu-scene-stage{visibility:visible}
+.menu-scene-ready #school-scene,.menu-scene-ready #menu-fallback{display:none}
+.menu-app .site-version{position:fixed;top:auto;bottom:max(12px,env(safe-area-inset-bottom));left:max(12px,env(safe-area-inset-left));z-index:4;display:grid;place-items:center;width:44px;height:44px;padding:4px;border:0;background:transparent;cursor:pointer}
+.menu-app .app-seal{display:block;width:36px;height:36px;object-fit:contain}
+.menu-app .site-version:focus-visible{outline:2px solid #fff4df;outline-offset:5px}
+.menu-app .ss-update-panel{left:12px;top:auto;bottom:max(68px,calc(env(safe-area-inset-bottom) + 56px));max-height:calc(100svh - 92px);overflow:auto}
+.menu-app .ss-update-panel a[href="software.html#releases"]{display:none}
+.street-view-controls{display:none}
+.sign-motion{position:fixed;left:68px;bottom:max(12px,env(safe-area-inset-bottom));z-index:3;min-height:44px;padding:8px;border:0;background:transparent;color:#fff4df;text-shadow:0 1px 2px #21170d;font:600 16px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-align:left;cursor:pointer}
+.sign-motion:hover{color:#fff}
+.sign-motion:focus-visible{outline:2px solid #fff4df;outline-offset:2px}
+.sign-motion[hidden]{display:none}
+dialog[data-destination="play"] .destination-bar{display:none}
+dialog[data-destination="play"],dialog[data-destination="play"] #destination-frame{background:transparent}
+dialog[data-destination="play"]::backdrop{background:transparent}
+@media(max-width:600px){
+  .menu-scene-stage{overflow:hidden}
+  #menu-scene-frame{width:100%;height:100%;max-width:none}
+  .menu-scene-ready .street-view-controls{position:fixed;right:16px;bottom:max(96px,calc(env(safe-area-inset-bottom) + 96px));z-index:3;display:flex;gap:6px}
+  .street-view-controls button{min-width:65px;min-height:42px;padding:8px 12px;border:1px solid #795238;border-radius:3px;background:#d1aa7e;color:#291d14;font:15px/1.2 Georgia,serif;cursor:pointer}
+  .street-view-controls button[aria-pressed="true"]{background:#efcfaa;font-weight:700}
+  .street-view-controls button:focus-visible{outline:2px solid #20170f;outline-offset:3px}
+  .menu-app .ss-update-panel{left:12px;right:12px;top:auto;width:auto}
+}

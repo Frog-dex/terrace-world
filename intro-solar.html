@@ -1,0 +1,1705 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<title>Toga — The Solar System</title>
+<script>
+  document.documentElement.classList.add('js');
+  document.documentElement.classList.add('earth-intro');
+  document.title='Spirit Striker: Solar system to Earth';
+  // The birthday controls belong to the Astrology stage. They are revealed
+  // only by the timeline's explicit astrology-ready state below, never by a
+  // wall-clock fallback while the Solar stage is still on screen.
+</script>
+<style>
+  :root{--birth-scale:1}
+  html,body{margin:0;height:100%;background:#000006;overflow:hidden;cursor:default}
+  #gl{position:fixed;inset:0;width:100vw;height:100vh;display:block}
+  #grain{position:fixed;inset:-60px;z-index:3;pointer-events:none;opacity:0.09;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E")}
+  html.earth-intro #birth,html.earth-intro #approach-story,html.earth-intro #grain{display:none!important}
+  #earth-playback{display:none;position:fixed;bottom:32px;left:50%;transform:translateX(-50%);z-index:8;align-items:center;gap:12px;color:#eee1bf;background:none;padding:0;font:13px Arial,sans-serif;white-space:nowrap;text-shadow:0 1px 3px #000}
+  html.earth-intro #earth-playback{display:flex}
+  #earth-story-caption{display:none;position:fixed;left:50%;top:50%;z-index:4;margin:0;color:#f5dfaa;font:400 clamp(19px,2.2vw,30px)/1.25 Georgia,serif;text-shadow:0 1px 3px #000;pointer-events:none;white-space:nowrap;transform:translateY(-50%)}
+  html.earth-intro #earth-story-caption:not([hidden]){display:block}
+  #earth-story-caption{isolation:isolate;padding:12px 16px}
+  #earth-story-caption::before{content:"";position:absolute;inset:-18px -24px;background:radial-gradient(ellipse,rgba(0,0,0,.62),rgba(0,0,0,.28) 45%,transparent 73%);z-index:-1}
+  .imagery-credit{display:none;position:fixed;right:14px;bottom:10px;z-index:5;margin:0;max-width:calc(100% - 28px);color:#fff;font:11px/1.35 Arial,sans-serif;text-align:right;text-shadow:0 1px 3px #000,0 1px 5px #000;pointer-events:none}
+  html.earth-intro .imagery-credit{display:block}
+  #sky-motion{display:none;position:fixed;top:20px;right:22px;z-index:8;color:#e8e5d9;background:#141815;border:0;border-radius:3px;padding:11px 14px;font:14px system-ui,sans-serif;cursor:pointer}
+  html.stargazing #sky-motion{display:block}
+  #sky-motion:focus-visible{outline:2px solid #fff;outline-offset:3px}
+  #earth-playback button{border:0;background:none;color:inherit;padding:8px;min-height:44px;font:inherit;cursor:pointer}
+  #earth-playback button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+  #earth-status{font-size:12px;color:#bbb}
+  @media(max-width:600px){#earth-playback{bottom:66px;gap:12px}#earth-status{display:none}}
+  /* the birthday instrument — three brass DIALS rising from the bottom edge (Blu's sketch):
+     big sun-ticked DAY dial centre, MONTH and YEAR discs tucked beside it. No plaque, no keyboard. */
+  #birth{position:fixed;left:50%;bottom:0;z-index:5;transform:translateX(-50%) translateY(16px);
+    width:min(94vw,calc(700px * var(--birth-scale)));padding-bottom:calc(90px * var(--birth-scale));
+    font-family:Georgia,serif;color:#e8cd8f;letter-spacing:2px;text-align:center;
+    opacity:1;pointer-events:auto;transition:opacity 2.4s ease,transform 2.4s cubic-bezier(.16,.72,.22,1)}
+  html:not(.astrology-ready) #birth{opacity:0;pointer-events:none;
+    transform:translateX(-50%) translateY(16px)}
+  html.js #birth:not(.on){opacity:0;pointer-events:none;transform:translateX(-50%) translateY(16px)}
+  #birth.on{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0)}
+  #birth.leaving{opacity:.35;pointer-events:none;transform:translateX(-50%) translateY(10px)}
+  #btitle{font-size:calc(16px * var(--birth-scale));letter-spacing:calc(5px * var(--birth-scale));
+    color:#e6c98a;margin-bottom:calc(30px * var(--birth-scale));
+    text-shadow:0 1px 2px #000,0 0 18px rgba(0,0,0,0.9)}
+  #btitle small{display:block;margin-top:calc(9px * var(--birth-scale));
+    color:#d6d8dd;font-size:calc(11px * var(--birth-scale));font-weight:400;
+    line-height:1.35;letter-spacing:calc(1.3px * var(--birth-scale));text-transform:none}
+  /* the round slope the dials sit on (Blu's sketch): a cratered metal mound */
+  #bmound{position:absolute;left:50%;bottom:calc(-210px * var(--birth-scale));transform:translateX(-50%);
+    z-index:0;pointer-events:none;width:170%;height:calc(350px * var(--birth-scale));
+    border-radius:50% 50% 0 0/100% 100% 0 0;
+    background:
+      radial-gradient(ellipse 90px 22px at 26% 26%, rgba(0,0,0,0.38), transparent 70%),
+      radial-gradient(ellipse 70px 18px at 55% 40%, rgba(0,0,0,0.34), transparent 70%),
+      radial-gradient(ellipse 110px 26px at 78% 30%, rgba(0,0,0,0.36), transparent 70%),
+      radial-gradient(ellipse 50px 14px at 40% 18%, rgba(0,0,0,0.30), transparent 70%),
+      radial-gradient(120% 110% at 50% 0%, #3d434d 0%, #262b33 40%, #14171c 78%, #0a0c0f 100%);
+    box-shadow:inset 0 10px 24px rgba(214,226,242,0.12), 0 -8px 50px rgba(0,0,0,0.65)}
+  #bdials{position:relative;z-index:1;height:calc(292px * var(--birth-scale));
+    display:flex;justify-content:center;align-items:flex-end}
+  .bd{position:relative;touch-action:none;cursor:grab;user-select:none}
+  .bd:active{cursor:grabbing}
+  #bdM,#bdY{width:calc(190px * var(--birth-scale));height:calc(190px * var(--birth-scale));
+    margin-bottom:calc(20px * var(--birth-scale));z-index:1}
+  #bdM{margin-right:calc(-36px * var(--birth-scale))}
+  #bdY{margin-left:calc(-36px * var(--birth-scale))}
+  #bdD{width:calc(270px * var(--birth-scale));height:calc(270px * var(--birth-scale));
+    margin-bottom:calc(7px * var(--birth-scale));z-index:2}
+  /* dome shading: every dial reads as a rounded boss, not a flat coin */
+  .bdisc::after{content:'';position:absolute;inset:0;border-radius:50%;pointer-events:none;z-index:2;
+    background:radial-gradient(circle at 32% 26%, rgba(255,246,220,0.30) 0%, rgba(255,246,220,0.10) 22%,
+      rgba(0,0,0,0) 46%, rgba(0,0,0,0.26) 78%, rgba(0,0,0,0.48) 100%)}
+  .bdisc{position:absolute;inset:0;border-radius:50%;will-change:transform;overflow:hidden;
+    background:radial-gradient(circle at 35% 28%,#f2dda4 0%,#cfa95c 30%,#8a6a2f 62%,#57411a 84%,#3a2c10 100%);
+    border:2px solid #5d451c;
+    box-shadow:inset 0 3px 8px rgba(255,240,200,0.55), inset 0 -10px 22px rgba(0,0,0,0.6),
+               0 8px 30px rgba(0,0,0,0.7)}
+  .bdisc canvas{position:absolute;inset:0;width:100%;height:100%}
+  /* the YEAR dial is the MOON's: silver metal */
+  #bdY .bdisc{background:radial-gradient(circle at 35% 28%,#f2f6fb 0%,#c3ccd8 30%,#7e8896 62%,#4a525e 84%,#2e343d 100%);
+    border-color:#3d454f;
+    box-shadow:inset 0 3px 8px rgba(240,247,255,0.6), inset 0 -10px 22px rgba(0,0,0,0.6),
+               0 8px 30px rgba(0,0,0,0.7)}
+  #bdY .bwin{border-color:rgba(176,190,208,0.65)}
+  /* the metal faces: Higgsfield-sculpted from the bare discs themselves —
+     brass bas-relief SUN on the month dial, engraved silver MOON on the year.
+     The tick canvas sits on its own layer above. Centre stays bare for the globe. */
+  #bdM .bdisc{background:url('images/journey/dial-sun.jpg') center/105% no-repeat,
+    radial-gradient(circle at 35% 28%,#f2dda4 0%,#cfa95c 30%,#8a6a2f 62%,#57411a 84%,#3a2c10 100%)}
+  #bdY .bdisc{background:url('images/journey/dial-moon.jpg') center/105% no-repeat,
+    radial-gradient(circle at 35% 28%,#f2f6fb 0%,#c3ccd8 30%,#7e8896 62%,#4a525e 84%,#2e343d 100%)}
+  /* centre (day) dial: the WORLD OF TOGA — Blu's real map sculpted in verdigris copper.
+     (swap url to dial-toga-enamel.jpg for the brass-and-teal-enamel version) */
+  #bdD .bdisc{background:url('images/journey/dial-toga.jpg') center/105% no-repeat,
+    radial-gradient(circle at 35% 28%,#f2dda4 0%,#cfa95c 30%,#8a6a2f 62%,#57411a 84%,#3a2c10 100%)}
+  /* the ticker: a real pointer wedge fixed to the bezel, reading the engraved face */
+  .bd::before{content:'';position:absolute;left:50%;top:0;transform:translateX(-50%);z-index:4;pointer-events:none;
+    width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;
+    border-top:13px solid #f0d9a0;
+    filter:drop-shadow(0 1px 0 #5d451c) drop-shadow(0 1px 2px rgba(0,0,0,0.8))}
+  #bdY::before{border-top-color:#e2e9f2;filter:drop-shadow(0 1px 0 #3d454f) drop-shadow(0 1px 2px rgba(0,0,0,0.8))}
+  .bd:hover .bdisc{filter:brightness(1.09)}
+  /* the value lives ON the disc — no pillbox. Tap it to type (it lights up brass). */
+  .bwin{position:absolute;left:50%;top:75%;transform:translate(-50%,-50%);z-index:3;
+    min-width:calc(68px * var(--birth-scale));padding:calc(3px * var(--birth-scale)) calc(10px * var(--birth-scale));
+    border-radius:14px;pointer-events:auto;cursor:text;
+    color:#ffedb8;font-size:calc(20px * var(--birth-scale));font-weight:700;letter-spacing:2px;
+    text-shadow:0 0 6px rgba(0,0,0,0.95),0 0 14px rgba(0,0,0,0.9),0 0 26px rgba(0,0,0,0.75),0 1px 2px #000;
+    transition:text-shadow 0.25s ease,background 0.25s ease}
+  .bwin:hover{text-shadow:0 0 6px rgba(0,0,0,0.95),0 0 14px rgba(0,0,0,0.9),0 0 22px rgba(240,217,160,0.55)}
+  .bwin.edit{background:rgba(6,9,18,0.82);
+    box-shadow:0 0 0 1px rgba(240,217,160,0.7),0 0 20px rgba(240,217,160,0.4)}
+  .bwin input{width:100%;background:transparent;border:none;outline:none;text-align:center;
+    color:#f2ddaa;font:inherit;letter-spacing:inherit;padding:0}
+  #bdD .bwin{top:62%;font-size:calc(28px * var(--birth-scale));min-width:calc(76px * var(--birth-scale))}
+  /* let the masculine and feminine faces read clearly */
+  #bdM .bdisc,#bdY .bdisc{filter:saturate(1.05) brightness(1.09)}
+  .bcap{position:absolute;left:50%;transform:translateX(-50%);top:calc(-32px * var(--birth-scale));
+    z-index:3;pointer-events:none;font-size:calc(11px * var(--birth-scale));
+    letter-spacing:calc(3px * var(--birth-scale));color:#c9ad6b;text-shadow:0 1px 2px #000}
+  /* REVEAL: a proper brass button seated on the mound below the dials, clear of everything */
+  #bgo{position:absolute;left:50%;bottom:calc(-70px * var(--birth-scale));transform:translateX(-50%);z-index:3;
+    background:linear-gradient(180deg,#efd28c 0%,#c9a24a 45%,#8a6a2f 100%);color:#241806;
+    border:1px solid #4e3a15;border-radius:999px;
+    padding:calc(13px * var(--birth-scale)) calc(54px * var(--birth-scale));
+    font-family:Georgia,serif;font-size:calc(15px * var(--birth-scale));font-weight:700;
+    letter-spacing:calc(6px * var(--birth-scale));cursor:pointer;
+    box-shadow:0 4px 16px rgba(0,0,0,0.65), 0 0 26px rgba(240,217,160,0.22),
+      inset 0 2px 0 rgba(255,244,210,0.85), inset 0 -3px 6px rgba(60,42,12,0.55);
+    text-shadow:0 1px 0 rgba(255,238,195,0.5)}
+  #bgo:hover{filter:brightness(1.1)}
+  #bgo:active{transform:translateX(-50%) translateY(1px)}
+  /* the result gets its own brass plaque — round slope on the bottom */
+  #bres{display:none;font-size:calc(17px * var(--birth-scale));line-height:1.55;
+    padding:calc(18px * var(--birth-scale)) calc(26px * var(--birth-scale));
+    margin-bottom:calc(18px * var(--birth-scale));max-height:62vh;overflow:auto;
+    border-radius:20px 20px 48% 48%/20px 20px 56px 56px;
+    background:linear-gradient(165deg,rgba(26,20,10,0.94),rgba(9,7,4,0.94)) padding-box,
+               linear-gradient(135deg,#9a7a36,#f0d9a0 26%,#6b4f1f 54%,#d9b96a 80%,#7a5c26) border-box;
+    border:2px solid transparent;
+    box-shadow:0 12px 55px rgba(0,0,0,0.65), inset 0 1px 0 rgba(240,217,160,0.28)}
+  #bres small{font-size:calc(13px * var(--birth-scale));color:#c7d1e2;
+    letter-spacing:calc(2px * var(--birth-scale))}
+  #bres .btag{color:#d9bc7d;font-size:calc(11px * var(--birth-scale));
+    letter-spacing:calc(4px * var(--birth-scale))}
+  .bactions{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;
+    gap:calc(10px * var(--birth-scale));margin-top:calc(10px * var(--birth-scale))}
+  .bl{appearance:none;background:transparent;border:0;
+    padding:calc(4px * var(--birth-scale)) 0;color:#e5c985;
+    font:700 calc(12px * var(--birth-scale))/1.3 Georgia,serif;
+    letter-spacing:calc(2px * var(--birth-scale));cursor:pointer}
+  .bl:hover{color:#f2ddaa}
+  #bcontinue{display:block;margin:calc(18px * var(--birth-scale)) auto 0;
+    border:1px solid #6f5421;border-radius:7px;
+    padding:calc(13px * var(--birth-scale)) calc(24px * var(--birth-scale));
+    background:#d5af5d;color:#211706;
+    font:700 calc(14px * var(--birth-scale))/1.2 Georgia,serif;
+    letter-spacing:calc(3px * var(--birth-scale));cursor:pointer;
+    box-shadow:inset 0 1px 0 rgba(255,246,215,.7),0 3px 8px rgba(0,0,0,.45)}
+  #bcontinue:hover{background:#ead08d}
+  #bcontinue:focus-visible,.bl:focus-visible,#bgo:focus-visible{outline:3px solid #f4dfaa;outline-offset:4px}
+  #bcontinue:disabled{cursor:wait;background:#8e7a51;color:#292219}
+  #approach-story{display:none;position:fixed;left:clamp(28px,7vw,120px);top:50%;z-index:5;
+    width:min(520px,44vw);transform:translateY(-50%);color:#f1e7c9;
+    font-family:Georgia,'Times New Roman',serif;text-shadow:0 2px 5px rgba(0,0,0,.9);
+    pointer-events:none;transition:opacity .25s linear}
+  #approach-story b{display:block;max-width:460px;font-size:clamp(25px,3.2vw,54px);
+    line-height:1.02;font-weight:500;letter-spacing:.015em}
+  #approach-story span{display:block;max-width:400px;margin-top:18px;color:#cfbd8b;
+    font-size:clamp(13px,1.2vw,18px);line-height:1.5;letter-spacing:.06em}
+  #approach-story small{display:block;margin-top:30px;color:#a6b8ca;
+    font:700 11px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:.22em}
+  html.toga-approach #birth{display:none!important}
+  /* The return flight is a visual camera beat. Copy here sat directly in the
+     planet path and made the approach unreadable, so this scene stays clean. */
+  html.toga-approach #approach-story{display:none!important}
+
+  /* One staged mechanism arrives after Astrology. The instrument is still
+     visible by default; only this brief entering class receives the stagger. */
+  #birth.on.is-entering #btitle,#birth.on.is-entering #bmound,
+  #birth.on.is-entering #bdM,#birth.on.is-entering #bdD,
+  #birth.on.is-entering #bdY,#birth.on.is-entering #bgo{opacity:.22;filter:blur(5px)}
+  #birth.on.is-entering.is-entered #btitle,#birth.on.is-entering.is-entered #bmound,
+  #birth.on.is-entering.is-entered #bdM,#birth.on.is-entering.is-entered #bdD,
+  #birth.on.is-entering.is-entered #bdY,#birth.on.is-entering.is-entered #bgo{opacity:1;filter:blur(0)}
+  #birth.on.is-entering #btitle{transform:translateY(14px);transition:opacity .9s ease .08s,transform .9s cubic-bezier(.16,.72,.22,1) .08s,filter .9s ease .08s}
+  #birth.on.is-entering #bmound{transform:translateX(-50%) translateY(28px);transition:opacity 1.15s ease .24s,transform 1.15s cubic-bezier(.16,.72,.22,1) .24s,filter 1.15s ease .24s}
+  #birth.on.is-entering #bdD{transform:translateY(34px) scale(.93);transition:opacity 1.1s ease .48s,transform 1.1s cubic-bezier(.16,.72,.22,1) .48s,filter 1.1s ease .48s}
+  #birth.on.is-entering #bdM{transform:translate(28px,24px) scale(.94);transition:opacity 1.05s ease .68s,transform 1.05s cubic-bezier(.16,.72,.22,1) .68s,filter 1.05s ease .68s}
+  #birth.on.is-entering #bdY{transform:translate(-28px,24px) scale(.94);transition:opacity 1.05s ease .82s,transform 1.05s cubic-bezier(.16,.72,.22,1) .82s,filter 1.05s ease .82s}
+  #birth.on.is-entering #bgo{transform:translateX(-50%) translateY(14px);transition:opacity .9s ease 1.12s,transform .9s cubic-bezier(.16,.72,.22,1) 1.12s,filter .9s ease 1.12s}
+  #birth.on.is-entering.is-entered #btitle{transform:translateY(0)}
+  #birth.on.is-entering.is-entered #bmound{transform:translateX(-50%) translateY(0)}
+  #birth.on.is-entering.is-entered #bdM,#birth.on.is-entering.is-entered #bdD,
+  #birth.on.is-entering.is-entered #bdY{transform:translate(0,0) scale(1)}
+  #birth.on.is-entering.is-entered #bgo{transform:translateX(-50%) translateY(0)}
+  /* True narrow phones keep the full instrument inside the viewport without
+     returning to unreadably small type. Low-DPR desktop zoom is handled in JS. */
+  @media (max-width:600px){
+    #approach-story{left:22px;right:22px;top:22%;width:auto;transform:none}
+    #approach-story b{font-size:30px}#approach-story span{font-size:13px}
+    #birth{width:96vw;padding-bottom:64px}
+    #btitle{font-size:14px;letter-spacing:3px;margin-bottom:25px}
+    #bdials{height:186px}
+    #bmound{height:230px;bottom:-142px}
+    #bdM,#bdY{width:112px;height:112px;margin-bottom:13px}
+    #bdM{margin-right:-16px}
+    #bdY{margin-left:-16px}
+    #bdD{width:162px;height:162px;margin-bottom:4px}
+    .bwin{font-size:14px;min-width:46px;padding:3px 8px}
+    #bdD .bwin{font-size:18px;min-width:52px}
+    .bcap{top:-25px;font-size:10px;letter-spacing:2px}
+    #bgo{font-size:14px;padding:11px 34px;letter-spacing:4px;bottom:-53px}
+    #bres{font-size:14px;padding:14px 16px;max-height:68vh}
+    #bres small{font-size:11px;letter-spacing:1px}
+    #bres .btag{font-size:10px;letter-spacing:2px}
+    .bl{font-size:11px;letter-spacing:1px;padding:5px 0}
+    #bcontinue{font-size:13px;letter-spacing:2px;padding:12px 18px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    /* Blu's system currently requests reduced motion. Keep the requested
+       gradual arrival, but remove travel and blur so it is non-vestibular. */
+    #birth{transition:opacity .55s ease}
+    html.astrology-ready #birth.on{opacity:1;pointer-events:auto;transform:translateX(-50%)}
+    #birth.on.is-entering #btitle,#birth.on.is-entering #bmound,#birth.on.is-entering #bdM,
+    #birth.on.is-entering #bdD,#birth.on.is-entering #bdY,#birth.on.is-entering #bgo{
+      filter:none;transition:opacity .72s ease}
+    #birth.on.is-entering #btitle{transform:translateY(0)}
+    #birth.on.is-entering #bmound{transform:translateX(-50%)}
+    #birth.on.is-entering #bdM,#birth.on.is-entering #bdD,#birth.on.is-entering #bdY{
+      transform:translate(0,0) scale(1)}
+    #birth.on.is-entering #bgo{transform:translateX(-50%)}
+  }
+  /* The rooftop instrument stays in the children's sky, not on a small planet.
+     Existing celestial dial artwork remains untouched; only this shot changes. */
+  html.stargazing,html.stargazing body{background:#030509}
+  html.stargazing #bmound,html.stargazing #grain{display:none}
+  html.stargazing #birth:not(.leaving){opacity:1;pointer-events:auto;transform:translateX(-50%)}
+  html.stargazing #birth{bottom:20px;padding-bottom:calc(74px * var(--birth-scale));transition:none}
+  html.stargazing #btitle{font-size:calc(19px * var(--birth-scale));letter-spacing:.04em;margin-bottom:calc(32px * var(--birth-scale));text-shadow:0 1px 3px #000}
+  html.stargazing #btitle small{letter-spacing:.02em;font:calc(13px * var(--birth-scale))/1.45 system-ui,sans-serif;color:#d6d8dd}
+  html.stargazing #bgo{bottom:calc(-66px * var(--birth-scale));border-radius:4px;letter-spacing:.12em;box-shadow:inset 0 1px 0 #f5de9d,0 2px 4px #0007}
+  html.stargazing .bdisc{box-shadow:inset 0 3px 8px #fff0c86b,inset 0 -10px 22px #0008,0 3px 7px #0007}
+  html.stargazing #bdY .bdisc{box-shadow:inset 0 3px 8px #f0f7ff80,inset 0 -10px 22px #0008,0 3px 7px #0007}
+  html.stargazing #bres{max-height:46vh;border-radius:7px;box-shadow:inset 0 1px 0 #f0d9a047,0 3px 7px #0007}
+  @media(max-width:600px){
+    html.stargazing #birth{bottom:18px;padding-bottom:64px}
+    html.stargazing #btitle{font-size:18px;margin-bottom:25px}
+    html.stargazing #btitle small{font-size:12px}
+    html.stargazing #bgo{bottom:-53px}
+    html.stargazing #bres{max-height:53vh}
+  }
+</style>
+</head>
+<body>
+<canvas id="gl" role="img" aria-label="Interactive Solar System journey toward TOGA" tabindex="0"></canvas>
+<div id="earth-playback" aria-label="Earth shot playback"><button id="earth-play" type="button">Play zoom</button><button id="earth-replay" type="button">Replay zoom</button><span id="earth-status" role="status">Solar system to Earth</span></div>
+<p id="earth-story-caption" hidden>Earth, 1983</p>
+<p class="imagery-credit">Imagery © Esri, Vantor, Earthstar Geographics, GIS User Community · NASA / USGS</p>
+<button id="sky-motion" type="button" aria-label="Pause constellation rotation">Pause sky</button>
+<div id="grain"></div>
+<div id="approach-story" aria-live="polite">
+  <b>THE HAND BECOMES A CALENDAR.</b>
+  <span>Now follow the Five Finger Calendar home through the Solar System, toward TOGA.</span>
+  <small>SCROLL TO APPROACH TOGA</small>
+</div>
+<div id="birth">
+  <div id="btitle">WHEN WERE YOU BORN?<small>Set the date. Let the sky answer.</small></div>
+  <div id="bres"></div>
+  <div id="bmound"></div>
+  <div id="bdials">
+    <div class="bd" id="bdM"><div class="bdisc"></div><div class="bwin"></div><div class="bcap">MONTH</div></div>
+    <div class="bd" id="bdD"><div class="bdisc"></div><div class="bwin"></div><div class="bcap">DAY</div></div>
+    <div class="bd" id="bdY"><div class="bdisc"></div><div class="bwin"></div><div class="bcap">YEAR</div></div>
+    <button id="bgo">REVEAL</button>
+  </div>
+</div>
+<script type="importmap">{"imports":{
+  "three":"./lib/three.module.js",
+  "three/addons/":"./lib/jsm/"
+}}</script>
+<script type="module">
+import * as THREE from 'three';
+import {MONTHS,YEAR,dayOfYearFromGregorian,monthOfYearDay,bodyPartOfDay} from './models/spirit-months.js';
+import {chart} from './models/hd-core.js';
+import {CONST_STARS} from './models/constellation-data.js';
+import {loadTogaWorld} from './models/toga-world.js?v=contrast-v3';
+import {createNevadaTerrain, NEVADA_TARGET, geographicNormal, nevadaLightingAt} from './intro-nevada-terrain.js?v=complete-regional-v4';
+
+const SOLAR_MODE='earth-intro'; // Old public mode parameters use the current shot.
+const TOGA_APPROACH=SOLAR_MODE==='toga-approach';
+const IS_EARTH_INTRO=SOLAR_MODE==='earth-intro';
+const IS_STARGAZING=SOLAR_MODE==='stargazing';
+if(IS_EARTH_INTRO)document.getElementById('gl').setAttribute('aria-label','Our solar system, approaching Earth');
+if(IS_STARGAZING){
+  document.getElementById('gl').setAttribute('aria-label','Looking up into the night sky from the school rooftop');
+  document.getElementById('btitle').innerHTML='Your birthday, in the stars<small>Turn the dials. Reveal your Spirit Striker.</small>';
+}
+
+/* ================= renderer ================= */
+const canvas=document.getElementById('gl');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(2,IS_EARTH_INTRO?Math.max(1,devicePixelRatio):devicePixelRatio));
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=IS_STARGAZING?THREE.NoToneMapping:THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.45;
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x02040c);
+const cam=new THREE.PerspectiveCamera(48,1,0.1,4000);
+const stargazingSky=IS_STARGAZING
+  ? (await import('./intro-stargazing-sky.js?v=rocket-1983-v1')).createStargazingSky(THREE,{up:'y'})
+  : null;
+if(stargazingSky)scene.add(stargazingSky.group);
+let resizeFrame=0;
+let renderedWidth=0,renderedHeight=0;
+let interfaceScale=0;
+function syncInterfaceScale(){
+  // The in-app browser may run at 50% page density. CSS pixels then become
+  // physically tiny even though the viewport reports thousands of pixels.
+  const dpr=Math.max(0.5,devicePixelRatio||1);
+  const next=innerWidth<=600?1:IS_STARGAZING
+    ? Math.min(1.1,Math.max(.64,innerHeight/900),1/dpr)
+    : Math.min(1.75,1/dpr);
+  if(Math.abs(next-interfaceScale)<0.001)return;
+  interfaceScale=next;
+  document.documentElement.style.setProperty('--birth-scale',next.toFixed(3));
+}
+function resize(){
+  syncInterfaceScale();
+  const width=Math.max(1,Math.round(innerWidth));
+  const height=Math.max(1,Math.round(innerHeight));
+  renderer.setSize(width,height,false);
+  renderedWidth=width;renderedHeight=height;
+  cam.aspect=width/height;
+  cam.updateProjectionMatrix();
+}
+function queueResize(){
+  cancelAnimationFrame(resizeFrame);
+  resizeFrame=requestAnimationFrame(()=>{resize();requestAnimationFrame(resize);});
+}
+function ensureViewportSize(){
+  if(renderedWidth!==Math.round(innerWidth)||renderedHeight!==Math.round(innerHeight))resize();
+}
+addEventListener('resize',queueResize,{passive:true});
+addEventListener('orientationchange',queueResize,{passive:true});
+if(window.visualViewport)visualViewport.addEventListener('resize',queueResize,{passive:true});
+if('ResizeObserver' in window)new ResizeObserver(queueResize).observe(document.documentElement);
+resize();
+
+/* grain jitter */
+if(!IS_STARGAZING){const g=document.getElementById('grain');let gi=0;
+ setInterval(()=>{gi=(gi+1)%4;g.style.transform=`translate(${(gi%2)*17-8}px,${(gi>>1)*13-6}px)`;},90);}
+
+/* ================= authored procedural planet textures (1024x512, fbm) =================
+   These remain local and deterministic. TOGA is deliberately excluded: it keeps
+   Blu's approved satellite painting, untouched. */
+function makeNoise(seed){
+  const G=64,g=new Float32Array(G*G);let s=seed>>>0||1;
+  const rnd=()=>((s=(s*1103515245+12345)&0x7fffffff)/0x7fffffff);
+  for(let i=0;i<G*G;i++)g[i]=rnd();
+  return (x,y)=>{
+    const xi=Math.floor(x)&63,yi=Math.floor(y)&63,xf=x-Math.floor(x),yf=y-Math.floor(y);
+    const u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf);
+    const s00=g[yi*G+xi],s10=g[yi*G+((xi+1)&63)],s01=g[((yi+1)&63)*G+xi],s11=g[((yi+1)&63)*G+((xi+1)&63)];
+    return s00*(1-u)*(1-v)+s10*u*(1-v)+s01*(1-u)*v+s11*u*v;
+  };
+}
+function fbm(n,x,y,oct=5){let a=0,amp=0.55,f=1;for(let o=0;o<oct;o++){a+=amp*n(x*f,y*f);amp*=0.5;f*=2.03;}return a;}
+function lerpC(a,b,t){return a.clone().lerp(b,Math.max(0,Math.min(1,t)));}
+
+function planetTex(kind,seed){
+  const W=1024,H=512,c=document.createElement('canvas');c.width=W;c.height=H;
+  const x=c.getContext('2d'),img=x.createImageData(W,H),d=img.data;
+  const n1=makeNoise(seed),n2=makeNoise(seed*7+3);
+  const C=(h)=>new THREE.Color(h);
+  const pal={
+    mercury:{a:C('#4e463c'),b:C('#8d8171'),c:C('#b7ab97')},
+    venus:{a:C('#a4763a'),b:C('#e0b878'),c:C('#f6e3b4')},
+    mars:{a:C('#7c2f16'),b:C('#c96a3c'),c:C('#e8a877'),cap:C('#eef0f4')},
+    jupiter:{bands:['#7a5a3c','#c9a06a','#e8d3ac','#a5714a','#d9b98a','#8a6748','#e3caa2','#b98d5f'],spot:C('#c4502e')},
+    saturn:{bands:['#b39567','#dcc394','#efe0bb','#c2a877','#e6d3a8','#cbb181'],spot:null},
+    uranus:{a:C('#6fb9c4'),b:C('#a8dde4'),c:C('#d3f2f4')},
+    neptune:{a:C('#1e3fa8'),b:C('#3f6fd8'),c:C('#8fb4f2')},
+    sun:{a:C('#9b250c'),b:C('#ed7b20'),c:C('#ffe2a0')},
+  }[kind];
+  for(let j=0;j<H;j++)for(let i=0;i<W;i++){
+    const u=i/W,v=j/H;let col;
+    if(kind==='sun'){
+      // Granulation and long convection filaments keep the star from reading
+      // as a flat white lamp. The small hot cells survive at cinematic scale.
+      const warp=fbm(n2,u*6,v*6,4)*1.8;
+      const cells=fbm(n1,u*32+warp,v*24-warp,5);
+      const flow=fbm(n2,u*8+cells*1.6,v*14,5);
+      col=lerpC(pal.a,pal.b,Math.min(1,flow*1.3));
+      col=lerpC(col,pal.c,Math.max(0,cells-0.54)*2.15);
+      const lane=Math.sin((v+flow*.035)*Math.PI*44)*.5+.5;
+      col.offsetHSL(0,0,(lane-.5)*.045);
+    }else if(kind==='jupiter'||kind==='saturn'){
+      const bands=pal.bands;
+      const warp=(fbm(n1,u*10,v*10,4)-0.5)*(kind==='jupiter'?0.10:0.05);
+      const bv=(v+warp)*bands.length;
+      const bi=Math.max(0,Math.min(bands.length-1,Math.floor(bv)));
+      const bt=bv-bi;
+      const c0=C(bands[bi]),c1=C(bands[(bi+1)%bands.length]);
+      col=lerpC(c0,c1,bt*bt*(3-2*bt));
+      const tur=fbm(n2,u*34,v*26,5)-0.5;col.offsetHSL(0,0,tur*0.10);
+      if(kind==='jupiter'){ // great red spot
+        const dx=(u-0.68)*2.6,dy=(v-0.62)*5.5,r=dx*dx+dy*dy;
+        if(r<1)col=lerpC(col,pal.spot,(1-r)*0.85);
+      }
+    }else if(kind==='mars'){
+      const e=fbm(n1,u*7,v*7,5);
+      col=lerpC(lerpC(pal.a,pal.b,e*1.4-0.2),pal.c,Math.max(0,fbm(n2,u*13,v*13,4)-0.55)*1.6);
+      const maria=fbm(n2,u*4+9,v*4,3);if(maria>0.62)col.offsetHSL(0,0,-(maria-0.62)*0.9);
+      const pf=Math.pow(Math.abs(v-0.5)*2,6);col=lerpC(col,pal.cap,pf*1.1);
+    }else if(kind==='mercury'){
+      const e=fbm(n1,u*9,v*9,6);
+      col=lerpC(lerpC(pal.a,pal.b,e*1.5-0.25),pal.c,Math.max(0,fbm(n2,u*20,v*20,3)-0.6)*1.4);
+      const cr=fbm(n2,u*30,v*30,2);if(cr>0.66)col.offsetHSL(0,0,-(cr-0.66)*0.9);
+    }else if(kind==='venus'){
+      const sw=fbm(n1,u*5+fbm(n2,u*3,v*3,3)*1.6,v*6,5);
+      col=lerpC(lerpC(pal.a,pal.b,sw*1.5-0.2),pal.c,Math.max(0,sw-0.62)*1.8);
+    }else if(kind==='uranus'){
+      const e=fbm(n1,u*3,v*5,4);
+      col=lerpC(lerpC(pal.a,pal.b,0.4+e*0.5),pal.c,Math.max(0,e-0.6)*1.1);
+    }else{ // neptune
+      const e=fbm(n1,u*4,v*6,5);
+      col=lerpC(lerpC(pal.a,pal.b,e*1.2),pal.c,Math.max(0,fbm(n2,u*9,v*3,3)-0.62)*1.9);
+      const storm=((u-0.32)*7)**2+((v-0.42)*11)**2;if(storm<1)col.offsetHSL(0,0,-(1-storm)*0.25);
+    }
+    // A fine high-frequency pass prevents the magnified surfaces from becoming
+    // soft color blobs without adding external stock imagery.
+    const grit=fbm(n2,u*96,v*72,2)-0.5;
+    col.offsetHSL(0,0,grit*(kind==='uranus'?0.015:0.035));
+    const o=(j*W+i)*4;d[o]=col.r*255;d[o+1]=col.g*255;d[o+2]=col.b*255;d[o+3]=255;
+  }
+  x.putImageData(img,0,0);
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;
+  t.wrapS=THREE.RepeatWrapping;t.anisotropy=Math.min(16,renderer.capabilities.getMaxAnisotropy());return t;
+}
+function loadTex(src){const t=new THREE.TextureLoader().load(src);t.colorSpace=THREE.SRGBColorSpace;
+  // Equirectangular planets must wrap across longitude. ClampToEdge leaves
+  // SphereGeometry's UV meridian visible as the black spoke that used to cut
+  // through TOGA during the camera flight.
+  t.wrapS=THREE.RepeatWrapping;
+  t.anisotropy=Math.min(16,renderer.capabilities.getMaxAnisotropy());return t;}
+
+/* ================= the system — bigger, brighter, readable ================= */
+const SUN={sz:10};
+const PLANETS=[
+  {name:'Mercury',r:24, sz:1.5,spd:0.60,phase: 1.10,kind:'mercury'},
+  {name:'Venus',  r:33, sz:2.4,spd:0.44,phase: 2.72,kind:'venus'},
+  {name:IS_EARTH_INTRO?'Earth':'Toga',r:44,sz:3.4,spd:0.33,phase:-0.58,toga:true},
+  {name:'Mars',   r:55, sz:2.1,spd:0.26,phase: 0.44,kind:'mars'},
+  {name:'Jupiter',r:76, sz:6.8,spd:0.16,phase: 2.18,kind:'jupiter'},
+  {name:'Saturn', r:98, sz:5.8,spd:0.115,phase:-1.02,ring:true,kind:'saturn'},
+  {name:'Uranus', r:118,sz:3.7,spd:0.085,phase: 2.96,kind:'uranus'},
+  {name:'Neptune',r:136,sz:3.6,spd:0.065,phase:-2.46,kind:'neptune'},
+];
+
+/* --- textured sun with layered, physically separated corona --- */
+const sunMap=IS_STARGAZING?new THREE.Texture():loadTex('images/journey/sun-surface-v2.webp');
+sunMap.wrapS=THREE.RepeatWrapping;
+const sun=new THREE.Mesh(new THREE.SphereGeometry(SUN.sz,96,64),
+  new THREE.MeshBasicMaterial({map:sunMap,color:0xfff4d5,transparent:true,opacity:0,toneMapped:false}));
+scene.add(sun);
+const corona1=new THREE.Mesh(new THREE.SphereGeometry(SUN.sz*1.055,64,48),
+  new THREE.MeshBasicMaterial({color:0xffe2a0,transparent:true,opacity:0,blending:THREE.AdditiveBlending,side:THREE.BackSide,depthWrite:false,toneMapped:false}));
+const corona2=new THREE.Mesh(new THREE.SphereGeometry(SUN.sz*1.17,64,48),
+  new THREE.MeshBasicMaterial({color:0xff8d38,transparent:true,opacity:0,blending:THREE.AdditiveBlending,side:THREE.BackSide,depthWrite:false,toneMapped:false}));
+scene.add(corona1,corona2);
+
+// Two corona fields keep the surface legible while light rolls beyond the limb.
+const glowC=document.createElement('canvas');glowC.width=glowC.height=256;
+{const g=glowC.getContext('2d').createRadialGradient(128,128,8,128,128,128);
+ g.addColorStop(0,'rgba(255,251,231,1)');g.addColorStop(0.18,'rgba(255,230,168,.88)');
+ g.addColorStop(0.43,'rgba(255,160,72,.34)');g.addColorStop(1,'rgba(255,117,33,0)');
+ const cx=glowC.getContext('2d');cx.fillStyle=g;cx.fillRect(0,0,256,256);}
+const sunBillboard=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowC),
+  transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending,toneMapped:false}));
+sunBillboard.scale.setScalar(46);scene.add(sunBillboard);
+const hazeC=document.createElement('canvas');hazeC.width=hazeC.height=256;
+{const x=hazeC.getContext('2d'),g=x.createRadialGradient(122,136,18,128,128,128);
+ g.addColorStop(0,'rgba(255,210,128,.34)');g.addColorStop(.48,'rgba(255,137,48,.13)');
+ g.addColorStop(1,'rgba(255,91,24,0)');x.fillStyle=g;x.fillRect(0,0,256,256);}
+const sunHaze=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(hazeC),
+  transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending,toneMapped:false}));
+sunHaze.scale.set(58,52,1);sunHaze.visible=false;scene.add(sunHaze);
+
+function saturnRingTexture(){
+  const S=1024,c=document.createElement('canvas');c.width=c.height=S;
+  const x=c.getContext('2d'),img=x.createImageData(S,S),d=img.data;
+  const n=makeNoise(9041);
+  for(let py=0;py<S;py++)for(let px=0;px<S;px++){
+    const dx=(px+.5)/S*2-1,dy=(py+.5)/S*2-1,r=Math.sqrt(dx*dx+dy*dy);
+    const o=(py*S+px)*4;
+    if(r<0.39||r>0.985){d[o+3]=0;continue;}
+    const q=(r-.39)/.595;
+    const bands=.52+.25*Math.sin(q*178)+.13*Math.sin(q*431+1.7)+.08*(n(q*70,3)-.5);
+    const cassini=q>.50&&q<.565?0.055:1;
+    const edge=Math.min(1,(q/.045))*Math.min(1,(1-q)/.05);
+    const tone=THREE.MathUtils.clamp(bands,0,1);
+    d[o]=170+tone*70;d[o+1]=145+tone*72;d[o+2]=105+tone*75;
+    d[o+3]=255*edge*cassini*(.55+tone*.42);
+  }
+  x.putImageData(img,0,0);
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;
+  t.anisotropy=Math.min(16,renderer.capabilities.getMaxAnisotropy());return t;
+}
+const saturnRings=IS_STARGAZING?null:saturnRingTexture();
+
+/* --- lights: strong key + fill so planets actually read --- */
+const sunLight=new THREE.PointLight(0xfff2d6,2.6,0,0);scene.add(sunLight);   // decay 0 = every planet lit
+scene.add(new THREE.AmbientLight(0x48536e,2.1));
+const fill=new THREE.DirectionalLight(0x9fb4e0,0.85);fill.position.set(60,120,160);scene.add(fill);
+
+// Read the same original layers and saved EDIT geometry as the live Globe.
+// Atmosphere remains a separate water-only layer; no terrain regeneration.
+// Earth is an opt-in shot only. Never change TOGA's assets or saved EDIT layout.
+const togaWorld=IS_STARGAZING ? {atlas:null,waterMask:null,facingRotation:0} : IS_EARTH_INTRO ? {
+  atlas:await new THREE.TextureLoader().loadAsync('assets/intro-earth-energy-v1/earth-nasa-july-5400.jpg'),
+  waterMask:null,facingRotation:0
+} : await loadTogaWorld(THREE,renderer);
+if(IS_EARTH_INTRO){
+  togaWorld.atlas.colorSpace=THREE.SRGBColorSpace;
+  togaWorld.atlas.wrapS=THREE.RepeatWrapping;
+  togaWorld.atlas.anisotropy=Math.min(16,renderer.capabilities.getMaxAnisotropy());
+}
+const togaWaterMask=togaWorld.waterMask;
+function makeTogaWaterOptics(radius){
+  const uniforms={uWaterMask:{value:togaWaterMask},uOpacity:{value:0}};
+  const shell=new THREE.Mesh(new THREE.SphereGeometry(radius*1.0007,96,64),
+    new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.FrontSide,uniforms,
+      vertexShader:`varying vec2 vUv;varying vec3 vP;varying vec3 vN;varying vec3 vV;
+        void main(){vUv=uv;vP=normalize(position);vN=normalize(normalMatrix*normal);
+          vec4 mv=modelViewMatrix*vec4(position,1.0);vV=normalize(-mv.xyz);gl_Position=projectionMatrix*mv;}`,
+      fragmentShader:`varying vec2 vUv;varying vec3 vP;varying vec3 vN;varying vec3 vV;
+        uniform sampler2D uWaterMask;uniform float uOpacity;
+        float waterAt(vec2 d){return texture2D(uWaterMask,
+          vec2(fract(vUv.x+d.x),clamp(vUv.y+d.y,0.0,1.0))).a;}
+        void main(){
+          float water=smoothstep(0.72,0.98,waterAt(vec2(0.0)));if(water<=0.001)discard;
+          vec2 nearPx=vec2(10.0/4096.0,10.0/2048.0);
+          vec2 shelfPx=vec2(30.0/4096.0,30.0/2048.0);float neighbours=0.0;
+          neighbours+=waterAt(vec2( nearPx.x,0.0));neighbours+=waterAt(vec2(-nearPx.x,0.0));
+          neighbours+=waterAt(vec2(0.0, nearPx.y));neighbours+=waterAt(vec2(0.0,-nearPx.y));
+          neighbours+=waterAt(vec2( shelfPx.x,0.0));neighbours+=waterAt(vec2(-shelfPx.x,0.0));
+          neighbours+=waterAt(vec2(0.0, shelfPx.y));neighbours+=waterAt(vec2(0.0,-shelfPx.y));
+          neighbours+=waterAt(vec2( shelfPx.x*.72, shelfPx.y*.72));
+          neighbours+=waterAt(vec2(-shelfPx.x*.72, shelfPx.y*.72));
+          neighbours+=waterAt(vec2( shelfPx.x*.72,-shelfPx.y*.72));
+          neighbours+=waterAt(vec2(-shelfPx.x*.72,-shelfPx.y*.72));neighbours/=12.0;
+          float coast=water*smoothstep(0.015,0.38,1.0-neighbours);
+          float facing=max(dot(vN,vV),0.0);float viewPhase=pow(1.0-facing,1.55);
+          float polar=smoothstep(0.58,0.94,abs(vP.y));
+          vec3 colour=mix(vec3(.08,.34,.46),vec3(.23,.58,.72),viewPhase);
+          colour=mix(colour,vec3(.17,.62,.64),coast*.82);
+          colour=mix(colour,vec3(.22,.52,.67),polar*.32);
+          float alpha=water*(.10+viewPhase*.18+coast*.18+polar*.035)*uOpacity;
+          gl_FragColor=vec4(colour,clamp(alpha,0.0,.42));}` }));
+  shell.visible=false;shell.renderOrder=-1;return {shell,uniforms};
+}
+
+/* --- planets --- */
+const bodies=[];
+for(const p of (IS_STARGAZING?[]:PLANETS)){
+  const pivot=new THREE.Group();pivot.rotation.y=p.phase;scene.add(pivot);
+  // TOGA uses the same approved satellite surface as the full Globe scene.
+  // The old journey/toga-world.jpg is only a pale outline study.
+  const baseMap=p.toga?togaWorld.atlas:planetTex(p.kind,PLANETS.indexOf(p)*17+5);
+  const mat=new THREE.MeshStandardMaterial({
+    map:baseMap,bumpMap:(!p.toga&&['mercury','venus','mars'].includes(p.kind))?baseMap:null,
+    bumpScale:p.kind==='mercury'?0.14:0.08,roughness:p.toga?0.78:0.86,metalness:0,
+    transparent:true,opacity:0,emissive:p.toga?0xffffff:0x05070b,
+    emissiveMap:p.toga?baseMap:null,emissiveIntensity:p.toga?0.30:0.12});
+  if(IS_EARTH_INTRO&&p.toga){
+    // Preserve the lit solar opening, then join the registered USGS photos in
+    // their unlit source-color pipeline before the first image layer appears.
+    // Otherwise ACES/exposure on NASA but not USGS creates a false color seam.
+    p._sourceColorUniform={value:0};
+    mat.onBeforeCompile=shader=>{
+      shader.uniforms.uEarthSourceColor=p._sourceColorUniform;
+      shader.fragmentShader='uniform float uEarthSourceColor;\n'+shader.fragmentShader;
+      shader.fragmentShader=shader.fragmentShader.replace('#include <colorspace_fragment>',
+        'gl_FragColor.rgb = mix(gl_FragColor.rgb, diffuseColor.rgb, uEarthSourceColor);\n#include <colorspace_fragment>');
+    };
+    mat.customProgramCacheKey=()=> 'earth-intro-source-color-v1';
+  }
+  const mesh=new THREE.Mesh(new THREE.SphereGeometry(p.sz,96,64),mat);
+  // SphereGeometry faces the centre of the equirectangular texture at zero.
+  // Keep TOGA there so the green-and-gold home continent, not the empty ocean,
+  // is the destination of the approach.
+  mesh.position.x=p.r;mesh.rotation.y=p.toga?togaWorld.facingRotation:(p.phase*.73);pivot.add(mesh);
+  const ring=new THREE.Mesh(new THREE.RingGeometry(p.r-0.05,p.r+0.05,160),
+    new THREE.MeshBasicMaterial({color:0x33456a,transparent:true,opacity:0,side:THREE.DoubleSide}));
+  ring.rotation.x=-Math.PI/2;scene.add(ring);
+  if(p.toga){
+    if(!IS_EARTH_INTRO){
+      const water=makeTogaWaterOptics(p.sz);
+      mesh.add(water.shell);p._waterOptics=water.shell;p._waterUniforms=water.uniforms;
+    }
+    // Use the same material language as the full Globe scene: a thin blue
+    // atmospheric rim and a separate moving weather shell. A translucent
+    // solid sphere produced the old thick grey ring at close range.
+    const atmosphere={uOpacity:{value:0}};
+    const atm=new THREE.Mesh(new THREE.SphereGeometry(p.sz*1.065,96,64),
+      new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.BackSide,
+        blending:THREE.AdditiveBlending,uniforms:atmosphere,
+        vertexShader:`varying vec3 vN;varying vec3 vV;void main(){vN=normalize(normalMatrix*normal);
+          vec4 mv=modelViewMatrix*vec4(position,1.0);vV=normalize(-mv.xyz);gl_Position=projectionMatrix*mv;}`,
+        fragmentShader:`varying vec3 vN;varying vec3 vV;uniform float uOpacity;void main(){
+          float nv=max(-dot(vN,vV),0.0);float t=clamp(nv/0.34,0.0,1.0);
+          float f=pow(smoothstep(0.0,1.0,t),1.15)*0.82*uOpacity;
+          gl_FragColor=vec4(vec3(0.30,0.58,1.0)*f,f);}`}));
+    mesh.add(atm);p._atm=atm;p._atmUniforms=atmosphere;
+    const weather={uTime:{value:0},uOpacity:{value:0},uSwirl:{value:IS_EARTH_INTRO?1:0}};
+    const clouds=new THREE.Mesh(new THREE.SphereGeometry(p.sz*1.022,96,64),
+      new THREE.ShaderMaterial({transparent:true,depthWrite:false,uniforms:weather,
+        vertexShader:`varying vec3 vP;varying vec3 vN;varying vec3 vV;
+          void main(){vP=normalize(position);vN=normalize(normalMatrix*normal);
+            vec4 mv=modelViewMatrix*vec4(position,1.0);vV=normalize(-mv.xyz);gl_Position=projectionMatrix*mv;}`,
+        fragmentShader:`varying vec3 vP;varying vec3 vN;varying vec3 vV;
+          uniform float uTime;uniform float uOpacity;uniform float uSwirl;
+          float hash(vec3 p){p=fract(p*0.3183099+vec3(0.1,0.2,0.3));p*=17.0;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
+          float noise(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);
+            return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
+                       mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z);}
+          float fbm(vec3 p){float v=0.0,a=0.5;for(int i=0;i<5;i++){v+=a*noise(p);p*=2.13;a*=0.5;}return v;}
+          vec3 swirl(vec3 p,vec3 axis){float d=distance(p,axis);float ang=1.6*exp(-d*d*9.0);float s=sin(ang),c=cos(ang);vec3 k=normalize(axis);return p*c+cross(k,p)*s+k*dot(k,p)*(1.0-c);}
+          void main(){float t=uTime*0.008;vec3 wind=vec3(t*0.55,t*0.06,t*0.30);
+            vec3 p=vP;
+            if(uSwirl>.5){
+              p=swirl(p,normalize(vec3(cos(t*.7),.35*sin(t*.5),sin(t*.7))));
+              p=swirl(p,normalize(vec3(cos(1.9+t*.43),-.4*sin(.8+t*.31),sin(1.9+t*.43))));
+            }
+            vec3 q=p*3.2+wind;
+            float w=fbm(q+2.4*vec3(fbm(q*.5),fbm(q*.7+11.0),fbm(q*.6+37.0)));
+            float cover=fbm(p*1.15+wind*.35);float zone=smoothstep(.36,.60,fbm(p*.55+wind*.22+7.0));
+            float a=smoothstep(.55,.82,w*.70+cover*.50)*zone;a=a*a*(3.0-2.0*a);
+            a*=1.0-.6*pow(1.0-max(dot(vN,vV),0.0),2.0);
+            vec3 col=mix(vec3(.80,.86,.92),vec3(1.0),smoothstep(.45,.9,w));
+            gl_FragColor=vec4(col,a*.92*uOpacity);}`}));
+    mesh.add(clouds);p._clouds=clouds;p._cloudUniforms=weather;
+  }
+  if(p.ring){
+    const rg=new THREE.Mesh(new THREE.RingGeometry(p.sz*1.42,p.sz*2.52,256),
+      new THREE.MeshStandardMaterial({map:saturnRings,color:0xffe3b2,roughness:.92,metalness:0,
+        transparent:true,opacity:0,alphaTest:.012,depthWrite:false,side:THREE.DoubleSide}));
+    rg.rotation.x=-Math.PI/2.48;rg.rotation.z=.09;mesh.add(rg);p._rg=rg;
+  }
+  bodies.push({p,pivot,mesh,mat,orbitRing:ring});
+}
+const nevadaTerrain=IS_EARTH_INTRO
+  ? await createNevadaTerrain(THREE,renderer,bodies.find(b=>b.p.toga).mesh,3.4)
+  : null;
+
+/* --- asteroid belt between Mars & Jupiter --- */
+const beltN=IS_STARGAZING?0:1100,beltPos=new Float32Array(beltN*3);
+for(let i=0;i<beltN;i++){
+  const a=Math.random()*Math.PI*2,r=62+Math.random()*9;
+  beltPos.set([Math.cos(a)*r,(Math.random()*2-1)*1.4,Math.sin(a)*r],i*3);
+}
+const beltG=new THREE.BufferGeometry();beltG.setAttribute('position',new THREE.BufferAttribute(beltPos,3));
+const spriteC=document.createElement('canvas');spriteC.width=spriteC.height=64;
+{const g=spriteC.getContext('2d').createRadialGradient(32,32,0,32,32,32);
+ g.addColorStop(0,'#fff');g.addColorStop(0.4,'rgba(255,255,255,.5)');g.addColorStop(1,'rgba(255,255,255,0)');
+ const cx=spriteC.getContext('2d');cx.fillStyle=g;cx.fillRect(0,0,64,64);}
+const spriteTex=new THREE.CanvasTexture(spriteC);
+const belt=new THREE.Points(beltG,new THREE.PointsMaterial({color:0x8a7f6e,size:0.65,map:spriteTex,
+  transparent:true,opacity:0,depthWrite:false,sizeAttenuation:true,toneMapped:false}));
+scene.add(belt);
+
+/* ================= the particle LOADING LAYER — spiral, natural, dynamic ================
+   Every body is born from a vortex: particles start far out on random arcs and SPIRAL
+   inward onto the sphere — no straight lines. Per-particle: swirl turns, tilt axis, bob. */
+const CAND=IS_STARGAZING?[]:[{sz:SUN.sz,body:null,col:0xffd9a0}].concat(bodies.map(b=>({sz:b.p.sz,body:b,col:b.p.toga?0x8fe8d8:0xaac4ff})));
+const PPB=560,N=CAND.length*PPB;
+const pos=new Float32Array(N*3),col=new Float32Array(N*3);
+const surf=new Float32Array(N*3);        // final local point on the sphere
+const dir0=new Float32Array(N*3);        // start direction (unit)
+const meta=new Float32Array(N*4);        // r0, swirlTurns, tiltPhase, stagger
+const tmpC=new THREE.Color();
+{let k=0;
+ for(const c of CAND){
+  tmpC.setHex(c.col);
+  for(let i=0;i<PPB;i++){
+    const s=new THREE.Vector3().randomDirection();
+    surf.set([s.x*c.sz*1.02,s.y*c.sz*1.02,s.z*c.sz*1.02],k*3);
+    const d=new THREE.Vector3().randomDirection();
+    dir0.set([d.x,d.y,d.z],k*3);
+    meta.set([120+Math.random()*260,(Math.random()<0.5?-1:1)*(0.6+Math.random()*1.4),Math.random()*Math.PI*2,Math.random()*0.5],k*4);
+    pos.set([d.x*300,d.y*300,d.z*300],k*3);
+    col.set([tmpC.r,tmpC.g,tmpC.b],k*3);
+    k++;
+  }
+ }}
+const pg=new THREE.BufferGeometry();
+pg.setAttribute('position',new THREE.BufferAttribute(pos,3));
+pg.setAttribute('color',new THREE.BufferAttribute(col,3));
+const pmat=new THREE.PointsMaterial({size:1.5,map:spriteTex,vertexColors:true,
+  transparent:true,opacity:1,depthWrite:false,blending:THREE.AdditiveBlending,sizeAttenuation:true,toneMapped:false});
+const pcloud=new THREE.Points(pg,pmat);scene.add(pcloud);
+const _axis=new THREE.Vector3(),_v=new THREE.Vector3(),_tmp=new THREE.Vector3(),
+      _cameraForward=new THREE.Vector3(),_cameraAim=new THREE.Vector3();
+
+/* the sky wheel: EVERYTHING celestial lives here and rotates together —
+   pano dome, star layers, dust, constellations. Stars follow the stars. */
+const skyWheel=new THREE.Group();scene.add(skyWheel);
+
+/* ================= starfield: two layers, one twinkling ================= */
+function starLayer(n,dist,size,color){
+  const a=new Float32Array(n*3);
+  for(let i=0;i<n;i++){const v=new THREE.Vector3().randomDirection().multiplyScalar(dist+Math.random()*600);a.set([v.x,v.y,v.z],i*3);}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(a,3));
+  const m=new THREE.PointsMaterial({color,size,map:spriteTex,transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending,toneMapped:false});
+  const p=new THREE.Points(g,m);skyWheel.add(p);return p;
+}
+const stars1=starLayer(IS_STARGAZING?0:2200,900,1.5,0xdfe7ff);
+const stars2=starLayer(IS_STARGAZING?0:900,850,2.4,0xfff2d0);   // twinkle layer
+// faint dust motes drifting with the sky — the background's own particle layer
+const dust=(()=>{
+  const n=IS_STARGAZING?0:900,a=new Float32Array(n*3),col=new Float32Array(n*3);
+  const c1=new THREE.Color(0xd9a94e),c2=new THREE.Color(0x9fb8d8);
+  for(let i=0;i<n;i++){
+    const v=new THREE.Vector3().randomDirection().multiplyScalar(620+Math.random()*640);
+    a.set([v.x,Math.abs(v.y)*0.9+30,v.z],i*3);
+    const c=Math.random()<0.5?c1:c2;col.set([c.r,c.g,c.b],i*3);
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(a,3));
+  g.setAttribute('color',new THREE.BufferAttribute(col,3));
+  const m=new THREE.PointsMaterial({size:2.2,map:spriteTex,vertexColors:true,transparent:true,opacity:0,
+    depthWrite:false,blending:THREE.AdditiveBlending,sizeAttenuation:true,toneMapped:false});
+  const p=new THREE.Points(g,m);skyWheel.add(p);return p;
+})();
+
+/* ================= night sky: one giant seamless 360° pano, 16 zone tints baked in.
+   Lives INSIDE the sky wheel so the background rotates with the constellations. ===== */
+const skyDome=(()=>{
+  const t=IS_STARGAZING?null:loadTex('images/journey/sky-pano.jpg');
+  const m=new THREE.Mesh(new THREE.SphereGeometry(1500,64,40),
+    new THREE.MeshBasicMaterial({map:t,side:THREE.BackSide,transparent:true,opacity:0,depthWrite:false,toneMapped:false}));
+  skyWheel.add(m);return m;
+})();
+// colour-mood dome: a soft gradient wash tinted by the sign you're facing
+const moodC=document.createElement('canvas');moodC.width=8;moodC.height=256;
+{const x=moodC.getContext('2d');const g=x.createLinearGradient(0,0,0,256);
+ g.addColorStop(0,'rgba(255,255,255,0.5)');g.addColorStop(0.45,'rgba(255,255,255,0.16)');g.addColorStop(1,'rgba(255,255,255,0)');
+ x.fillStyle=g;x.fillRect(0,0,8,256);}
+const moodDome=new THREE.Mesh(new THREE.SphereGeometry(1400,32,24),
+  new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(moodC),side:THREE.BackSide,transparent:true,
+    opacity:0,depthWrite:false,blending:THREE.AdditiveBlending,color:0x8a4fbd,toneMapped:false}));
+scene.add(moodDome);
+if(IS_STARGAZING){
+  // Hide the legacy layer before the first possible renderer call. This mode
+  // never executes its particle-birth or solar-camera timeline.
+  for(const object of [sun,corona1,corona2,sunBillboard,sunHaze,belt,pcloud,stars1,stars2,dust,skyDome,moodDome])object.visible=false;
+}
+
+/* ================= 16 constellations: particles assemble → hand off to the REAL PNG =========
+   PNG stays (transparent, additive — black vanishes). Star pixels get flashing sprites. */
+const FAC={aries:0xe76f51,leo:0xe76f51,taurus:0x3f7d3a,virgo:0x3f7d3a,
+  gemini:0xd99000,aquarius:0xd99000,cancer:0x2a9d8f,scorpio:0x2a9d8f,
+  libra:0x4a6d8c,capricorn:0x4a6d8c,ophiuchus:0x8a4fbd,pisces:0x8a4fbd,
+  sagittarius:0xc8a046,cetus:0xc8a046,'north-dipper':0xd9a94e,south:0x9fd0e8};
+const CONST_R=560;
+
+/* ---- month labels: driven by the calendar canon (spirit-months.js), epoch Mar 21 ---- */
+const GDAYS=[31,28,31,30,31,30,31,31,30,31,30,31],
+      GMN=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+const EPOCH_OFF=GDAYS.slice(0,YEAR.epoch.gMonth-1).reduce((a,b)=>a+b,0)+YEAR.epoch.gDay; // year-day 1 in Gregorian
+function gfmt(yd){let a=((EPOCH_OFF+yd-2)%365)+1,m=0;while(a>GDAYS[m]){a-=GDAYS[m];m++;}return GMN[m]+' '+a;}
+const SUN_TAG={Cancer:'THE SUMMER SOLSTICE',Scorpio:'THE AUTUMN EQUINOX',Capricorn:'THE WINTER SOLSTICE'};
+const LABELS=(()=>{   // sign months only — the axis pair stays unlabeled in the rotation
+  const L={};let cum=0;
+  for(const m of MONTHS){
+    const start=cum+1,end=cum+m.days;cum+=m.days;
+    if(m.kind!=='sign')continue;
+    const range=gfmt(start)+' – '+gfmt(end);
+    L[m.name.toLowerCase()]={title:m.name.toUpperCase(),sub:'MONTH '+m.idx+' · '+range,tag:SUN_TAG[m.name]||null,range};
+  }
+  return L;
+})();
+
+/* TRUE SKY TIMES — the actual sun-passage windows (IAU boundaries), shown on
+   the labels as a separate truth from the even Toga months. The sky's timing
+   is wildly uneven: Scorpius ~6 days; the sun's edge clips Cetus's corner for
+   only ~14 HOURS around Mar 27–28 (the ecliptic passes <0.25° from it). The
+   RING placement stays even — the calendar's wheel — only the TIMES are real. */
+const TRUE_SKY={
+  aries:      'APR 18 – MAY 14',
+  taurus:     'MAY 14 – JUN 21',
+  gemini:     'JUN 21 – JUL 20',
+  cancer:     'JUL 20 – AUG 10',
+  leo:        'AUG 10 – SEP 16',
+  virgo:      'SEP 16 – OCT 30',
+  libra:      'OCT 30 – NOV 23',
+  scorpio:    'ONLY NOV 23 – 29',
+  ophiuchus:  'NOV 29 – DEC 17',
+  sagittarius:'DEC 17 – JAN 20',
+  capricorn:  'JAN 20 – FEB 16',
+  aquarius:   'FEB 16 – MAR 11',
+  pisces:     'MAR 11 – APR 18',
+  cetus:      'ONLY ~14 HOURS · MAR 27–28',
+};
+for(const[s,t]of Object.entries(TRUE_SKY))if(LABELS[s])LABELS[s].true=t;
+
+function makeLabelTex(l){
+  const c=document.createElement('canvas');c.width=560;c.height=210;
+  const x=c.getContext('2d');x.textAlign='center';
+  try{x.letterSpacing='8px';}catch(e){}
+  x.font='600 42px Georgia,serif';x.fillStyle='#e8cd8f';
+  x.shadowColor='rgba(233,200,130,0.55)';x.shadowBlur=14;
+  x.fillText(l.title,280,56);
+  try{x.letterSpacing='3px';}catch(e){}
+  x.font='25px Georgia,serif';x.fillStyle='#c7d2e2';x.shadowBlur=8;
+  x.fillText(l.sub,280,104);
+  if(l.true){x.font='21px Georgia,serif';x.fillStyle='#9fb8d0';
+    x.fillText('TRUE SKY · '+l.true,280,144);}
+  if(l.tag){x.font='20px Georgia,serif';x.fillStyle='#9b8756';x.fillText(l.tag,280,182);}
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;return t;
+}
+
+const CONSTELLATIONS=[
+  ...['aries','taurus','gemini','cancer','leo','virgo','libra','scorpio','ophiuchus',
+      'sagittarius','capricorn','aquarius','pisces','cetus'].map((s,i)=>({slug:s,el:30,az:360/14*i})),
+  {slug:'north-dipper',el:78,az:0,scale:1.2},
+  {slug:'south',el:-58,az:180,scale:1.2},
+];
+const consts=[];
+function placeConstellation(cfg){
+  const img=new Image();img.crossOrigin='anonymous';
+  img.onload=()=>{
+    const w=170,h=170,c=document.createElement('canvas');c.width=w;c.height=h;
+    const x=c.getContext('2d');x.drawImage(img,0,0,w,h);
+    let d;try{d=x.getImageData(0,0,w,h).data;}catch(e){return;}
+    const pts=[],starPts=[];
+    for(let j=0;j<h;j+=2)for(let i=0;i<w;i+=2){
+      const o=(j*w+i)*4,lum=(d[o]+d[o+1]+d[o+2])/3;
+      if(lum>70)pts.push([i/w-0.5,0.5-j/h]);
+      if(lum>232)starPts.push([i/w-0.5,0.5-j/h]);       // the bright star-dots
+    }
+    if(!pts.length)return;
+    const step=Math.max(1,Math.floor(pts.length/900));
+    const use=pts.filter((_,i)=>i%step===0);
+    const n=use.length,home=new Float32Array(n*3),scat=new Float32Array(n*3);
+    const cpos=new Float32Array(n*3),ccol=new Float32Array(n*3);
+    const skyElevation=IS_STARGAZING?(Math.abs(cfg.el)<=50?62:cfg.el):cfg.el;
+    const el=skyElevation*Math.PI/180,az=cfg.az*Math.PI/180;
+    const dir=new THREE.Vector3(Math.cos(el)*Math.sin(az),Math.sin(el),Math.cos(el)*Math.cos(az));
+    const centre=dir.clone().multiplyScalar(CONST_R);
+    const up=new THREE.Vector3(0,1,0);
+    const right=new THREE.Vector3().crossVectors(up,dir).normalize();
+    const vup=new THREE.Vector3().crossVectors(dir,right).normalize();
+    // planes must FACE the camera at the centre (normal -dir), or every texture
+    // renders back-face mirrored — flip the x axis with it so sprites stay aligned
+    const rn=right.clone().negate(),dn=dir.clone().negate();
+    const sc=95*(cfg.scale||1);
+    tmpC.setHex(FAC[cfg.slug]||0xffd9a0);
+    const glowCol=tmpC.clone().lerp(new THREE.Color(1,0.95,0.8),0.55);
+    for(let i=0;i<n;i++){
+      const[px,py]=use[i];
+      const H=centre.clone().addScaledVector(rn,px*sc).addScaledVector(vup,py*sc);
+      home.set([H.x,H.y,H.z],i*3);
+      const s=new THREE.Vector3().randomDirection().multiplyScalar(200+Math.random()*280);
+      scat.set([s.x,s.y,s.z],i*3);cpos.set([s.x,s.y,s.z],i*3);
+      ccol.set([glowCol.r,glowCol.g,glowCol.b],i*3);
+    }
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position',new THREE.BufferAttribute(cpos,3));
+    g.setAttribute('color',new THREE.BufferAttribute(ccol,3));
+    const pts3=new THREE.Points(g,new THREE.PointsMaterial({size:3.4,map:spriteTex,vertexColors:true,
+      transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending,sizeAttenuation:true,toneMapped:false}));
+    skyWheel.add(pts3);
+    // THE ACTUAL PNG — always there, transparent (additive kills the black bg)
+    const planeTex=loadTex(img.src);
+    const plane=new THREE.Mesh(new THREE.PlaneGeometry(sc*1.06,sc*1.06),
+      new THREE.MeshBasicMaterial({map:planeTex,transparent:true,opacity:0,depthWrite:false,
+        blending:THREE.AdditiveBlending,side:THREE.DoubleSide,toneMapped:false}));
+    plane.position.copy(centre);
+    plane.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(rn,vup,dn));
+    skyWheel.add(plane);
+    // EXACT stars & lines — real catalog positions drawn in code; the art is
+    // fitted on top (the illustrations were generated on these very charts).
+    let flash=null,flash2=null,linesObj=null;
+    const SD=CONST_STARS[cfg.slug];
+    if(SD){
+      const PS=(x,y,off)=>centre.clone().addScaledVector(rn,x*sc*1.06)
+        .addScaledVector(vup,y*sc*1.06).addScaledVector(dn,off);
+      const bright=[],dim=[];
+      SD.stars.forEach(([x,y,m])=>{(m<2.7?bright:dim).push(PS(x,y,2.5));});
+      const mk=(arr,size,col)=>{
+        if(!arr.length)return null;
+        const fa=new Float32Array(arr.length*3);
+        arr.forEach((v,i)=>fa.set([v.x,v.y,v.z],i*3));
+        const fg=new THREE.BufferGeometry();fg.setAttribute('position',new THREE.BufferAttribute(fa,3));
+        const p=new THREE.Points(fg,new THREE.PointsMaterial({color:col,size,map:spriteTex,
+          transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending,sizeAttenuation:true,toneMapped:false}));
+        skyWheel.add(p);return p;
+      };
+      flash=mk(bright,8.5,0xfff2c8);
+      flash2=mk(dim,5,0xdfe7f2);
+      const lp=new Float32Array(SD.lines.length*6);
+      SD.lines.forEach(([a,b],i)=>{
+        const A=PS(SD.stars[a][0],SD.stars[a][1],1.5),B=PS(SD.stars[b][0],SD.stars[b][1],1.5);
+        lp.set([A.x,A.y,A.z,B.x,B.y,B.z],i*6);
+      });
+      const lg=new THREE.BufferGeometry();lg.setAttribute('position',new THREE.BufferAttribute(lp,3));
+      linesObj=new THREE.LineSegments(lg,new THREE.LineBasicMaterial({color:0xbcc8da,
+        transparent:true,opacity:0,blending:THREE.AdditiveBlending,toneMapped:false}));
+      skyWheel.add(linesObj);
+    }
+    // the month label, hung just beneath the art
+    let label=null;
+    const li=LABELS[cfg.slug];
+    if(li){
+      const lw=sc*1.12,lh=lw*210/560;
+      label=new THREE.Mesh(new THREE.PlaneGeometry(lw,lh),
+        new THREE.MeshBasicMaterial({map:makeLabelTex(li),transparent:true,opacity:0,
+          depthWrite:false,side:THREE.DoubleSide,toneMapped:false}));
+      label.position.copy(centre).addScaledVector(vup,-sc*0.74);
+      label.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(rn,vup,dn));
+      skyWheel.add(label);
+    }
+    consts.push({points:pts3,plane,flash,flash2,lines:linesObj,label,home,scat,n,cfg,skyElevation,
+      phase:Math.random()*Math.PI*2,speed:1.6+Math.random()*1.6,
+      az:cfg.az*Math.PI/180,fac:new THREE.Color(FAC[cfg.slug]||0xd9a94e)});
+  };
+  img.onerror=()=>{};
+  img.src='images/journey/const-'+cfg.slug+'.png';
+}
+CONSTELLATIONS.forEach(placeConstellation);
+
+/* ================= your birthday → your Spirit Striker =================
+   Three brass drums — month · day · year. Drag or scroll, no keyboard. */
+const REVEAL={cc:null,targetRot:0,star:null,focus:0,handingOff:false};
+const birthPill=document.getElementById('birth'),
+      bgo=document.getElementById('bgo'),bres=document.getElementById('bres');
+let birthEntrancePlayed=false;
+let birthResult=null;
+function cancelBirthEntrance(){
+  birthPill?.classList.remove('is-entering','is-entered');
+}
+function playBirthEntrance(){
+  if(IS_STARGAZING)return;
+  if(birthEntrancePlayed)return;
+  birthEntrancePlayed=true;
+  cancelBirthEntrance();
+  birthPill.classList.add('is-entering');
+  requestAnimationFrame(()=>requestAnimationFrame(()=>birthPill.classList.add('is-entered')));
+}
+const SEAM_SLUG={Spirit:'north-dipper',Soul:'south'};
+/* ---- instrument sound: REAL audio (ElevenLabs-generated, in audio/) ----
+   dial-tick = detent click · amb-drone + amb-shimmer = the space bed, two
+   different-length seamless loops layered so the bed never audibly repeats ·
+   reveal-chime = the moment your sign swings around. ---- */
+const AC=('AudioContext'in window)?new AudioContext():null;
+const BUF={};
+if(AC)for(const[k,u]of Object.entries({tick:'audio/dial-tick.mp3',drone:'audio/amb-drone.mp3',
+  boot:'audio/boot-up.mp3',chime:'audio/reveal-chime.mp3',
+  'tick-sun':'audio/tick-sun.mp3','tick-moon':'audio/tick-moon.mp3','tick-toga':'audio/tick-toga.mp3'}))
+  fetch(u).then(r=>r.arrayBuffer()).then(b=>AC.decodeAudioData(b))
+    .then(d=>BUF[k]=d).catch(()=>{});
+function playBuf(name,vol,loop){
+  if(!AC||AC.state!=='running'||!BUF[name])return;
+  const s=AC.createBufferSource(),g=AC.createGain();
+  s.buffer=BUF[name];s.loop=!!loop;g.gain.value=vol;
+  s.connect(g);g.connect(AC.destination);s.start();
+}
+function tickSound(name){playBuf(BUF[name]?name:'tick',0.5);}   // each dial has its own voice
+let ambOn=false;
+function startAmbience(){                       // first touch: the BOOT-UP — one gradual
+  if(ambOn||!AC)return;ambOn=true;              // spiritual power-on chime, then only a
+  AC.resume().then(()=>{                        // whisper of deep drone underneath
+    (function tryStart(){
+      if(!BUF.boot||!BUF.drone){setTimeout(tryStart,300);return;}
+      const t=AC.currentTime;
+      const bg=AC.createGain();bg.gain.setValueAtTime(0.001,t);
+      bg.gain.exponentialRampToValueAtTime(0.55,t+1.2);         // gradual bloom
+      const bs=AC.createBufferSource();bs.buffer=BUF.boot;
+      bs.connect(bg);bg.connect(AC.destination);bs.start(t);
+      const dg=AC.createGain();dg.gain.setValueAtTime(0,t);
+      dg.gain.linearRampToValueAtTime(0.07,t+8);                // drone rises after the chime
+      const ds=AC.createBufferSource();ds.buffer=BUF.drone;ds.loop=true;
+      ds.connect(dg);dg.connect(AC.destination);ds.start(t+2.5);
+    })();
+  });
+}
+addEventListener('pointerdown',startAmbience,{once:true});
+
+function dial(el,items,start,parse,opts){
+  // a machined instrument dial: the values are ENGRAVED on the disc face and
+  // rotate with the metal; the fixed bezel ticker reads them. Month and day
+  // wheels are true circles (wrap forever); the year drum is multi-turn with
+  // end stops and tick marks only — its window is the readout. Every detent
+  // clicks. Tap the pillbox window to type instead.
+  const disc=el.querySelector('.bdisc'),win=el.querySelector('.bwin');
+  const N=items.length,STEP=opts.step,WRAP=!!opts.wrap,minA=WRAP?-1e9:-(N-1)*STEP;
+  const face=document.createElement('canvas');disc.insertBefore(face,disc.firstChild);
+  function paintFace(){
+    const S=el.clientWidth,dpr=Math.min(2,devicePixelRatio||1);
+    face.width=S*dpr;face.height=S*dpr;
+    const x=face.getContext('2d');x.scale(dpr,dpr);
+    const c=S/2;
+    const ink=opts.silver?'rgba(35,42,54,0.92)':'rgba(56,39,11,0.92)';
+    const hi=opts.silver?'rgba(240,247,255,0.45)':'rgba(255,236,190,0.4)';
+    x.textAlign='center';x.textBaseline='middle';
+    const sub=opts.sub||1;
+    for(let k=0;k<N*sub;k++){
+      const a=k*STEP/sub*Math.PI/180;
+      const major=sub>1?(k%sub===0):(opts.major?(k%opts.major===0):true);
+      const r1=c*0.95,r2=c*(major?0.83:0.885);
+      for(const[col,off]of[[hi,1],[ink,0]]){                    // chiseled: light under ink
+        x.strokeStyle=col;x.lineWidth=major?2:1.1;
+        x.beginPath();
+        x.moveTo(c+Math.sin(a)*r1,c-Math.cos(a)*r1+off);
+        x.lineTo(c+Math.sin(a)*r2,c-Math.cos(a)*r2+off);
+        x.stroke();
+      }
+      if(opts.labels&&k%sub===0&&(k/sub)%opts.labels===0){
+        const rl=c*0.68,fs=opts.fs||11;
+        x.save();x.translate(c,c);x.rotate(a);
+        x.font=`700 ${fs}px Georgia,serif`;
+        x.fillStyle=hi;x.fillText(items[k/sub],0,-rl+1);
+        x.fillStyle=ink;x.fillText(items[k/sub],0,-rl);
+        x.restore();
+      }
+    }
+  }
+  paintFace();
+  addEventListener('resize',paintFace);
+  let ang=-start*STEP,vel=0,drag=null,raf=0,idle=0,lastCi=start;
+  const idxOf=a=>{const i=Math.round(-a/STEP);return WRAP?((i%N)+N)%N:Math.max(0,Math.min(N-1,i));};
+  const clamp=a=>WRAP?a:Math.max(minA-STEP*0.4,Math.min(STEP*0.4,a));
+  function show(){
+    disc.style.transform=`rotate(${ang.toFixed(2)}deg)`;
+    const ci=idxOf(ang);
+    if(ci!==lastCi){lastCi=ci;tickSound(opts.tick);}
+    if(!win.classList.contains('edit'))win.textContent=items[ci];
+  }
+  // tap the pillbox → brass highlight → type the value
+  win.addEventListener('pointerdown',e=>e.stopPropagation());
+  win.addEventListener('click',()=>{
+    if(win.querySelector('input'))return;
+    win.classList.add('edit');
+    const inp=document.createElement('input');
+    inp.type='text';inp.inputMode=parse.mode||'numeric';inp.maxLength=parse.len||4;
+    inp.value='';win.textContent='';win.appendChild(inp);inp.focus();
+    let done=false;
+    const commit=()=>{
+      if(done)return;done=true;
+      const i=parse(inp.value.trim());
+      win.classList.remove('edit');win.innerHTML='';
+      if(i!=null)ang=-Math.max(0,Math.min(items.length-1,i))*STEP;
+      show();
+    };
+    inp.addEventListener('blur',commit);
+    inp.addEventListener('keydown',ev=>{ev.stopPropagation();
+      if(ev.key==='Enter')commit();
+      if(ev.key==='Escape'){inp.value='';commit();}});
+  });
+  function glide(target){
+    target=Math.round(target/STEP)*STEP;
+    if(!WRAP)target=Math.max(minA,Math.min(0,target));
+    cancelAnimationFrame(raf);
+    (function step(){ang+=(target-ang)*0.22;
+      if(Math.abs(target-ang)<0.5){ang=target;show();return;}
+      show();raf=requestAnimationFrame(step);})();
+  }
+  const pang=e=>{const r=el.getBoundingClientRect();
+    return Math.atan2(e.clientY-(r.top+r.height/2),e.clientX-(r.left+r.width/2))*180/Math.PI;};
+  el.addEventListener('pointerdown',e=>{if(e.target.id==='bgo')return;
+    cancelAnimationFrame(raf);drag={p:pang(e)};vel=0;el.setPointerCapture(e.pointerId);});
+  el.addEventListener('pointermove',e=>{if(!drag)return;
+    const p=pang(e);let d=p-drag.p;while(d>180)d-=360;while(d<-180)d+=360;
+    drag.p=p;vel=d;ang=clamp(ang+d);show();});
+  const end=()=>{if(!drag)return;drag=null;glide(ang+vel*6);};
+  el.addEventListener('pointerup',end);el.addEventListener('pointercancel',end);
+  el.addEventListener('wheel',e=>{e.preventDefault();
+    let dy=e.deltaY;if(e.deltaMode===1)dy*=16;else if(e.deltaMode===2)dy*=120;
+    if(Math.abs(dy)>=90){                                        // mouse notch: instant ratchet click
+      cancelAnimationFrame(raf);
+      let t=Math.round(ang/STEP)*STEP-Math.sign(dy)*STEP;
+      if(!WRAP)t=Math.max(minA,Math.min(0,t));
+      ang=t;show();
+    }else{ang=clamp(ang-dy*0.22);show();clearTimeout(idle);idle=setTimeout(()=>glide(ang),120);}  // trackpad
+  },{passive:false});
+  show();
+  return{get idx(){return idxOf(ang);},
+         set idx(i){ang=-Math.max(0,Math.min(N-1,i))*STEP;show();}};
+}
+const DAYS31=Array.from({length:31},(_,i)=>String(i+1));
+const YNOW=new Date().getFullYear();
+const YEARS=Array.from({length:200},(_,i)=>String(YNOW-i));   // 200 years back — enough for anyone alive
+// typed-value parsers: return an item index, or null to keep the dialed value
+const parseM=v=>{if(!v)return null;
+  if(/^\d{1,2}$/.test(v)){const n=+v;return n>=1&&n<=12?n-1:null;}
+  const i=GMN.indexOf(v.toUpperCase().slice(0,3));return i>=0?i:null;};
+parseM.mode='text';parseM.len=9;
+const parseD=v=>{if(!/^\d{1,2}$/.test(v))return null;const n=+v;return n>=1&&n<=31?n-1:null;};
+parseD.len=2;
+const parseY=v=>{if(!/^\d{2}$|^\d{4}$/.test(v))return null;let y=+v;
+  if(v.length===2)y+=(y<=YNOW%100?2000:1900);
+  return Math.max(0,Math.min(199,YNOW-y));};
+parseY.len=4;
+const wM=dial(document.getElementById('bdM'),[...GMN],5,parseM,
+        {step:30,wrap:true,labels:0,sub:5,tick:'tick-sun'}),        // ticks only — window is the readout
+      wD=dial(document.getElementById('bdD'),DAYS31,14,parseD,
+        {step:360/31,wrap:true,labels:2,fs:10,tick:'tick-toga'}),   // 31 ticks, odd days engraved
+      wY=dial(document.getElementById('bdY'),YEARS,YNOW-2003,parseY,
+        {step:6,wrap:false,labels:0,major:5,silver:true,tick:'tick-moon'});  // silver multi-turn drum
+function revealBirth(){
+  const gm=wM.idx+1,gy=+YEARS[wY.idx];
+  let gd=wD.idx+1;
+  const dim=new Date(gy,gm,0).getDate();
+  if(gd>dim)gd=dim;                                           // FEB 31 folds to the month's last day
+  const yd=dayOfYearFromGregorian(new Date(gy,gm-1,gd,12));   // noon: DST-proof day math
+  const {month,dayInMonth}=monthOfYearDay(yd);
+  const slug=SEAM_SLUG[month.name]||month.name.toLowerCase();
+  const cc=consts.find(c=>c.cfg.slug===slug);
+  const ring=cc&&Math.abs(cc.cfg.el)<=50;
+  playBuf('chime',0.5);                          // the reveal moment
+  if(ring){                                   // swing the wheel so your sign faces you
+    REVEAL.cc=cc;REVEAL.targetRot=(IS_STARGAZING?Math.PI:0)-cc.az;
+    if(!REVEAL.star){
+      REVEAL.star=new THREE.Sprite(new THREE.SpriteMaterial({map:spriteTex,color:0xffe3a0,
+        transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending,toneMapped:false}));
+      skyWheel.add(REVEAL.star);
+    }
+    const el=cc.skyElevation*Math.PI/180,az=cc.az;
+    REVEAL.star.position.set(Math.cos(el)*Math.sin(az),Math.sin(el),Math.cos(el)*Math.cos(az))
+      .multiplyScalar(CONST_R-14);
+    REVEAL.star.position.y+=62;               // hangs just above the art
+  }
+  const fh='#'+new THREE.Color(FAC[slug]||0xd9a94e).getHexString();
+  const lab=LABELS[slug];
+  // Human Design — Tier A (Sun/Earth), noon assumed until exact time & place arrive
+  const hd=chart(new Date(Date.UTC(gy,gm-1,gd,12)));
+  const hdLine=`PROFILE ${hd.profile} · SUN ${hd.pSun.gate}.${hd.pSun.line} · EARTH ${hd.pEarth.gate}.${hd.pEarth.line}`+
+               ` · CROSS ${hd.cross.join(' / ')} · NOON ASSUMED`;
+  const name=`<b style="color:${fh}">${month.name.toUpperCase()}</b>`;
+  const links=(alt)=>`<div class="bactions">`+
+    `<button type="button" class="bl" id="${alt?'bgreg':'btoga'}">${alt?'BACK TO GREGORIAN':'SEE IT ON TOGA TIME'}</button>`+
+    `<span aria-hidden="true">·</span><button type="button" class="bl" id="bagain">SPIN AGAIN</button></div>`+
+    `<button type="button" id="bcontinue">CONTINUE TO THE FIVE FINGER CALENDAR</button>`;
+  birthResult={
+    name:month.name,
+    slug,
+    born:`${GMN[gm-1]} ${gd} ${gy}`,
+    gregorian:{month:gm,day:gd,year:gy},
+    toga:{month:month.idx,day:dayInMonth,body:bodyPartOfDay(dayInMonth,month)},
+  };
+  try{sessionStorage.setItem('spirit-striker-intro-result',JSON.stringify(birthResult));}catch(error){}
+  if(parent!==window)parent.postMessage({type:'toga:intro-birth-result',result:birthResult},location.origin);
+  // Gregorian first — Toga time is a choice, never forced
+  REVEAL.gregHTML=
+    `${name} — YOUR SPIRIT STRIKER<br>`+
+    `<small>BORN ${GMN[gm-1]} ${gd} ${gy} · ${month.name.toUpperCase()} KEEPS ${lab?lab.range:'THE TURNING OF THE YEAR'}`+
+    `${lab&&lab.tag?' · '+lab.tag:''}</small><br>`+
+    `<small>YOUR DESIGN THREAD · ${hdLine}</small><br>${links(false)}`;
+  REVEAL.togaHTML=
+    `<span class="btag">ON TOGA TIME — THE 16-MONTH CALENDAR</span><br>`+
+    `${name} · MONTH ${month.idx} · DAY ${dayInMonth}<br>`+
+    `<small>${bodyPartOfDay(dayInMonth,month).toUpperCase()}</small><br>`+
+    `<small>SOLAR 365 · LUNAR 354 · THE TWO SKIES ALIGN AT THE AXIS, NORTH & SOUTH</small><br>${links(true)}`;
+  for(const id of['btitle','bdials'])document.getElementById(id).style.display='none';
+  bres.style.display='block';
+  bres.innerHTML=REVEAL.gregHTML;
+  REVEAL.focus=0;
+  requestAnimationFrame(()=>document.getElementById('bcontinue')?.focus({preventScroll:true}));
+}
+bgo.addEventListener('click',revealBirth);
+function continueJourney(){
+  if(REVEAL.handingOff)return;
+  REVEAL.handingOff=true;
+  birthPill.classList.add('leaving');
+  const button=document.getElementById('bcontinue');
+  if(button){button.disabled=true;button.textContent='ENTERING THE HAND…';}
+  if(parent!==window)parent.postMessage({type:'toga:intro-next',source:'solar'},location.origin);
+  else location.href='journey.html?sequence=hand-globe-frog';
+}
+bres.addEventListener('click',e=>{
+  if(e.target.id==='btoga')bres.innerHTML=REVEAL.togaHTML;        // opt IN to Toga time
+  else if(e.target.id==='bgreg')bres.innerHTML=REVEAL.gregHTML;   // and back out
+  else if(e.target.id==='bcontinue')continueJourney();
+  else if(e.target.id==='bagain'){
+    bres.style.display='none';
+    document.getElementById('btitle').style.display='';
+    document.getElementById('bdials').style.display='flex';
+    REVEAL.cc=null;REVEAL.focus=0;REVEAL.handingOff=false;
+    birthPill.classList.remove('leaving');
+  }
+});
+
+/* ================= timeline =================
+   0.00–0.30 BIRTH   spiral vortex of particles → sphere surfaces (no straight lines)
+   0.30–0.55 REVEAL  solid planets fade in, 3/4 camera, system running & readable
+   0.55–0.88 LOOK UP night sky fades in, constellations particle-assemble
+   0.88–1.00 HANDOFF particles vanish → the real PNG art remains; star-dots flash forever */
+let T=0;
+const clock=new THREE.Clock();
+function smooth(a,b,x){x=Math.max(0,Math.min(1,(x-a)/(b-a)));return x*x*(3-2*x);}
+
+const TOGA_FLIGHT={p:0,target:0,sent:false};
+const _approachStart=new THREE.Vector3(0,95,220),_approachEnd=new THREE.Vector3();
+const _approachToga=new THREE.Vector3(),_approachAim=new THREE.Vector3();
+const _approachC1=new THREE.Vector3(),_approachC2=new THREE.Vector3();
+const _approachSurface=new THREE.Vector3(),_approachNormal=new THREE.Vector3();
+const _approachOrigin=new THREE.Vector3(0,0,0);
+function cubicPoint(out,a,b,c,d,t){
+  const q=1-t,q2=q*q,t2=t*t;
+  return out.set(
+    q2*q*a.x+3*q2*t*b.x+3*q*t2*c.x+t2*t*d.x,
+    q2*q*a.y+3*q2*t*b.y+3*q*t2*c.y+t2*t*d.y,
+    q2*q*a.z+3*q2*t*b.z+3*q*t2*c.z+t2*t*d.z);
+}
+function setApproachProgress(next){
+  if(!TOGA_APPROACH)return;
+  TOGA_FLIGHT.target=Math.max(0,Math.min(1,next));
+}
+if(TOGA_APPROACH){
+  addEventListener('wheel',e=>setApproachProgress(TOGA_FLIGHT.target+e.deltaY*0.00007),{passive:true});
+  addEventListener('keydown',e=>{
+    if(['ArrowDown','ArrowRight','PageDown',' ','Enter'].includes(e.key))setApproachProgress(TOGA_FLIGHT.target+0.06);
+    if(['ArrowUp','ArrowLeft','PageUp'].includes(e.key))setApproachProgress(TOGA_FLIGHT.target-0.06);
+  });
+  let approachSwipe=null;
+  canvas.addEventListener('pointerdown',e=>{approachSwipe={id:e.pointerId,y:e.clientY};});
+  canvas.addEventListener('pointerup',e=>{
+    if(!approachSwipe||approachSwipe.id!==e.pointerId)return;
+    setApproachProgress(TOGA_FLIGHT.target+(approachSwipe.y-e.clientY)*0.0009);approachSwipe=null;
+  });
+}
+function frameTogaApproach(dt){
+  // Scroll sets an intention, not the camera transform itself. Damping removes
+  // wheel-step jumps while retaining fully reversible travel.
+  TOGA_FLIGHT.p+=(TOGA_FLIGHT.target-TOGA_FLIGHT.p)*Math.min(1,dt*1.05);
+  const p=TOGA_FLIGHT.p,e=smooth(0,1,p),focus=smooth(0.12,0.82,p);
+  const toga=bodies.find(b=>b.p.toga);
+  // This route loads directly into the close approach, so it never passes the
+  // normal Solar timeline's solidification step. Make TOGA genuinely opaque
+  // here too; leaving a fully opaque sphere on Three.js' transparent queue was
+  // the source of the long black pole triangle.
+  if(toga.mat.transparent){toga.mat.transparent=false;toga.mat.opacity=1;toga.mat.needsUpdate=true;}
+  pcloud.visible=false;pmat.opacity=0;
+  // As the flight commits to TOGA, the Sun and neighboring worlds recede so
+  // the authored planet owns the frame instead of being crossed by a white disc.
+  sun.material.opacity=1-focus*0.78;
+  sunBillboard.material.opacity=0.78*(1-focus*0.92);
+  sunHaze.material.opacity=0;
+  belt.material.opacity=0.44*(1-focus*0.55);
+  for(const b of bodies){
+    b.mat.opacity=b===toga?1:Math.max(0.16,1-focus*0.84);
+    // Opacity zero still leaves the torus in the depth pass. Hide it outright
+    // so an orbit cannot cut a black notch into TOGA's limb.
+    b.orbitRing.material.opacity=0;b.orbitRing.visible=false;
+    if(b.p._atmUniforms)b.p._atmUniforms.uOpacity.value=0.72;
+    if(b.p._waterUniforms){b.p._waterUniforms.uOpacity.value=b===toga?1:0;b.p._waterOptics.visible=b===toga;}
+    if(b.p._cloudUniforms){b.p._cloudUniforms.uTime.value=T;b.p._cloudUniforms.uOpacity.value=0.82;b.p._clouds.rotation.y+=dt*.006;}
+    if(b===toga){b.p._atm.visible=true;b.p._clouds.visible=true;}
+    // Saturn's transparent ring can sort in front of TOGA during the close
+    // approach and read as a hard black seam across the destination. Let the
+    // ring disappear with the rest of the Solar context before the globe owns
+    // the frame.
+    if(b.p._rg){b.p._rg.visible=false;b.p._rg.material.opacity=0;}
+  }
+  stars1.material.opacity=0.22;stars2.material.opacity=0.11*(0.7+0.3*Math.sin(T*2.1));
+  dust.material.opacity=0;skyDome.material.opacity=0;moodDome.material.opacity=0;
+  for(const cc of consts){
+    cc.points.material.opacity=0;cc.points.visible=false;cc.plane.material.opacity=0;
+    if(cc.label)cc.label.material.opacity=0;if(cc.flash)cc.flash.material.opacity=0;
+    if(cc.flash2)cc.flash2.material.opacity=0;if(cc.lines)cc.lines.material.opacity=0;
+  }
+  toga.mesh.getWorldPosition(_approachToga);
+  // This authored surface point is the green interior of the TOGA continent.
+  // It is transformed from the globe itself, so the camera never falls into
+  // the ocean when the planetary composition changes around it.
+  _approachSurface.copy(togaWorld.homeNormal).multiplyScalar(toga.p.sz);
+  toga.mesh.localToWorld(_approachSurface);
+  _approachNormal.copy(_approachSurface).sub(_approachToga).normalize();
+  _approachEnd.copy(_approachSurface).addScaledVector(_approachNormal,6.2);
+  _approachEnd.x+=1.2;_approachEnd.y+=.55;
+  _approachC1.copy(_approachToga).add(new THREE.Vector3(-50,38,108));
+  _approachC2.copy(_approachSurface).addScaledVector(_approachNormal,28);
+  _approachC2.x-=7;_approachC2.y+=7;
+  cubicPoint(cam.position,_approachStart,_approachC1,_approachC2,_approachEnd,e);
+  _approachAim.lerpVectors(_approachOrigin,_approachSurface,focus);
+  cam.lookAt(_approachAim);
+  cam.rotateZ(-Math.sin(e*Math.PI)*.045);
+  cam.fov=44-10*smooth(0.52,1,p);cam.updateProjectionMatrix();
+  const story=document.getElementById('approach-story');
+  story.style.opacity=String(1-smooth(0.18,0.52,p));
+  if(p>=0.998&&TOGA_FLIGHT.target>=.999&&!TOGA_FLIGHT.sent){
+    TOGA_FLIGHT.sent=true;
+    if(parent!==window)parent.postMessage({type:'toga:intro-next',source:'solar-approach'},location.origin);
+    else location.href='journey.html?sequence=globe-frog';
+  }
+}
+
+let _lastF=0;
+// The opt-in cut keeps one camera from the solar system to a georeferenced
+// Nevada landscape. A separate, source-preserving town scene owns the landing.
+let earthTime=0,earthPlaying=IS_EARTH_INTRO&&!new URLSearchParams(location.search).has('hold')&&!matchMedia('(prefers-reduced-motion: reduce)').matches;
+const earthDuration=13;
+let earthHandoffSent=false,earthAltitudeKm=null,earthObliqueProgress=0,earthElevationDeg=90,earthHeadingProgress=0;
+const earthOrigin=new THREE.Vector3(),earthAim=new THREE.Vector3(),earthCentre=new THREE.Vector3();
+const earthCaptionPoint=new THREE.Vector3(),earthCaptionRim=new THREE.Vector3(),earthCaptionRight=new THREE.Vector3();
+function positionEarthCaption(earth,caption,isNevada){
+  // Project the actual Earth and its camera-facing rim after each camera move.
+  // This stays attached to the shot, not to an arbitrary viewport corner.
+  earthCaptionPoint.copy(isNevada?earthSurface:earthCentre).project(cam);
+  earthCaptionRight.set(1,0,0).applyQuaternion(cam.quaternion);
+  earthCaptionRim.copy(earthCentre).addScaledVector(earthCaptionRight,earth.p.sz).project(cam);
+  const width=renderer.domElement.clientWidth,height=renderer.domElement.clientHeight;
+  const x=(earthCaptionPoint.x*.5+.5)*width,y=(-earthCaptionPoint.y*.5+.5)*height;
+  const radius=isNevada?0:Math.abs(earthCaptionRim.x-earthCaptionPoint.x)*width*.5;
+  const labelWidth=caption.offsetWidth,labelHeight=caption.offsetHeight;
+  const gap=18,pad=20;
+  let left=isNevada?x-labelWidth*.5:x+radius+gap,top=isNevada?y+44:y;
+  if(left+labelWidth>width-pad){
+    left=x-labelWidth*.5;
+    top=y+Math.min(radius+gap+labelHeight*.5,height*.23);
+  }
+  caption.style.left=Math.max(pad,Math.min(width-labelWidth-pad,left))+'px';
+  caption.style.top=Math.max(80,Math.min(height-100,top))+'px';
+  caption.dataset.planetX=x.toFixed(2);caption.dataset.planetY=y.toFixed(2);caption.dataset.planetRadius=radius.toFixed(2);
+}
+const earthStart=new THREE.Vector3(0,135,245),earthDirection=new THREE.Vector3(.10,.22,1).normalize();
+const nevadaLat=NEVADA_TARGET.latitude*Math.PI/180,nevadaLon=NEVADA_TARGET.longitude*Math.PI/180;
+const nevadaNormal=new THREE.Vector3(...geographicNormal(NEVADA_TARGET.latitude,NEVADA_TARGET.longitude));
+const nevadaNorth=new THREE.Vector3(-Math.sin(nevadaLat)*Math.cos(nevadaLon),Math.cos(nevadaLat),Math.sin(nevadaLat)*Math.sin(nevadaLon));
+const nevadaEast=new THREE.Vector3(-Math.sin(nevadaLon),0,-Math.cos(nevadaLon));
+const earthWorldNormal=new THREE.Vector3(),earthWorldNorth=new THREE.Vector3(),earthWorldEast=new THREE.Vector3(),earthWorldApproach=new THREE.Vector3(),earthWorldUp=new THREE.Vector3(),earthSurface=new THREE.Vector3();
+const earthWash=IS_EARTH_INTRO?document.createElement('div'):null;
+if(earthWash){earthWash.setAttribute('aria-hidden','true');earthWash.style.cssText='position:fixed;inset:0;background:#fff;pointer-events:none;z-index:2';document.body.appendChild(earthWash);}
+function earthPlayState(){
+  document.getElementById('earth-play').textContent=earthPlaying?'Pause zoom':earthTime>=earthDuration?'Play again':'Play zoom';
+  document.getElementById('earth-status').textContent=earthTime>=earthDuration?'Nevada landscape · ready for town':earthTime>8?'Descending over Nevada':'Solar system to Nevada';
+}
+function frameEarthIntro(delta){
+  let playbackCompleted=false;
+  if(earthPlaying&&!document.hidden){earthTime=Math.min(earthDuration,earthTime+delta);if(earthTime>=earthDuration){earthPlaying=false;playbackCompleted=true;earthPlayState();}}
+  const t=earthTime,zoom=smooth(1.7,earthDuration,t),focus=smooth(1,3.7,t);
+  const storyCaption=document.getElementById('earth-story-caption');
+  const isNevadaCaption=t>=7.4;
+  storyCaption.textContent=isNevadaCaption?'Experimental town, Nevada':'Earth, 1983';
+  storyCaption.hidden=t<1.7||(t>6.2&&t<7.4)||t>11.8;
+  storyCaption.style.opacity=String(isNevadaCaption?smooth(7.4,8,t)*(1-smooth(11.1,11.8,t)):smooth(1.7,2.1,t)*(1-smooth(5.5,6.2,t)));
+  const alignment=smooth(1.7,7.3,t),context=1-smooth(2.3,5.6,t);
+  const earth=bodies.find(b=>b.p.toga);
+  const formation=smooth(.25,2.7,t),solid=smooth(1.25,2.65,t);
+  sun.material.opacity=context*solid;corona1.material.opacity=.34*context*solid;corona2.material.opacity=.12*context*solid;
+  sunBillboard.material.opacity=.52*context*solid;sunHaze.material.opacity=0;sun.rotation.y=t*.028;
+  earthWash.style.opacity=String(1-smooth(0,1.25,t));
+  belt.material.opacity=.35*context;stars1.material.opacity=.34*(1-smooth(6,9,t));stars2.material.opacity=.13*(1-smooth(6,9,t));
+  dust.material.opacity=0;skyDome.material.opacity=0;moodDome.material.opacity=0;
+  for(const b of bodies){
+    b.mat.opacity=(b===earth?1:context)*solid;b.mesh.visible=b===earth||context>.001;
+    const transparent=b.mat.opacity<.999;
+    if(b.mat.transparent!==transparent){b.mat.transparent=transparent;b.mat.needsUpdate=true;}
+    b.orbitRing.visible=false;
+    b.pivot.rotation.y=b.p.phase+t*b.p.spd*.045;
+    b.mesh.rotation.y=b.p.toga?-.64:b.p.phase*.73+t*.035;
+    if(b.p._atmUniforms)b.p._atmUniforms.uOpacity.value=.38*solid*(1-smooth(7,9,t));
+    if(b.p._cloudUniforms){b.p._cloudUniforms.uTime.value=t;b.p._cloudUniforms.uOpacity.value=.88*solid*(1-smooth(6.2,8.2,t));b.p._clouds.rotation.y=t*.012;}
+    if(b.p._rg){b.p._rg.visible=context>.1&&solid>.001;b.p._rg.material.opacity=.72*context*solid;}
+  }
+  const daylight=nevadaLightingAt(t);
+  earth.mat.color.setRGB(...daylight.linearMultiplier);
+  earth.mat.emissive.setRGB(...daylight.linearMultiplier);
+  earth.mat.emissiveIntensity=.30;
+  earth.p._sourceColorUniform.value=smooth(4.8,6.3,t);
+  for(const cc of consts){cc.points.visible=false;cc.plane.visible=false;if(cc.label)cc.label.visible=false;if(cc.flash)cc.flash.visible=false;if(cc.flash2)cc.flash2.visible=false;if(cc.lines)cc.lines.visible=false;}
+  scene.updateMatrixWorld(true);earth.mesh.getWorldPosition(earthCentre);
+  // Use the actual solar particle geometry. One continuous inward stream
+  // resolves onto the real bodies; no second movie or static system cut-in.
+  pmat.opacity=(1-smooth(1.9,2.85,t))*.9;pcloud.visible=pmat.opacity>.001;
+  pmat.size=THREE.MathUtils.lerp(1.2,.36,formation);
+  if(pcloud.visible){
+   for(let i=0;i<N;i++){
+    const j=i*3,k=i*4,ci=Math.floor(i/PPB),b=CAND[ci].body;
+    if(b)b.mesh.getWorldPosition(_tmp);else _tmp.set(0,0,0);
+    const e=smooth(meta[k+3]*.22,1,formation),left=1-e;
+    const angle=meta[k+1]*left*6.283+t*.13,ca=Math.cos(angle),sa=Math.sin(angle);
+    const radius=meta[k]*left*left*.55;
+    pos[j]=_tmp.x+surf[j]+(dir0[j]*ca+dir0[j+2]*sa)*radius;
+    pos[j+1]=_tmp.y+surf[j+1]+dir0[j+1]*radius*.35+Math.sin(meta[k+2]+e*6.283)*left*5;
+    pos[j+2]=_tmp.z+surf[j+2]+(-dir0[j]*sa+dir0[j+2]*ca)*radius;
+   }
+   pg.attributes.position.needsUpdate=true;
+  }
+  earthAim.lerpVectors(earthOrigin,earthCentre,focus);
+  // Logarithmic altitude (not a zoomed billboard) spans orbital to regional
+  // scales. Geographic surface, target and image registration stay identical.
+  earthWorldNormal.copy(nevadaNormal).transformDirection(earth.mesh.matrixWorld);
+  earthWorldNorth.copy(nevadaNorth).transformDirection(earth.mesh.matrixWorld);
+  earthWorldEast.copy(nevadaEast).transformDirection(earth.mesh.matrixWorld);
+  earthWorldApproach.copy(earthWorldEast).sub(earthWorldNorth).normalize();
+  earthDirection.copy(earthWorldNormal);
+  const startOffset=earthStart.clone().sub(earthAim);
+  const earthKmPerUnit=6371/earth.p.sz;
+  const startAltitudeKm=Math.max(12,(startOffset.length()-earth.p.sz)*earthKmPerUnit);
+  earthAltitudeKm=Math.exp(THREE.MathUtils.lerp(Math.log(startAltitudeKm),Math.log(12),zoom));
+  const distance=earth.p.sz+earthAltitudeKm/earthKmPerUnit;
+  const direction=startOffset.normalize().lerp(earthDirection,alignment).normalize();
+  cam.position.copy(earthAim).addScaledVector(direction,distance);
+  // Turn toward the town's authored isometric viewing side while still nadir,
+  // then descend from southeast at 35.5 degrees. The northwestern up reference
+  // is opposite the approach, keeping physical sky up throughout the tilt.
+  // It matches the town's render-only XY adapter without mirroring any imagery.
+  earthHeadingProgress=smooth(8.2,10,t);
+  const headingAngle=earthHeadingProgress*Math.PI/4;
+  earthWorldUp.copy(earthWorldNorth).multiplyScalar(Math.cos(headingAngle)).addScaledVector(earthWorldEast,-Math.sin(headingAngle));
+  earthObliqueProgress=smooth(10,earthDuration,t);
+  const horizontalRatio=1.4*earthObliqueProgress;
+  cam.position.addScaledVector(earthWorldApproach,earthAltitudeKm/earthKmPerUnit*horizontalRatio);
+  earthElevationDeg=Math.atan2(1,horizontalRatio)*180/Math.PI;
+  earthSurface.copy(earthCentre).addScaledVector(earthWorldNormal,earth.p.sz);
+  earthAim.lerp(earthSurface,smooth(5.5,8.2,t));
+  cam.up.set(0,1,0).lerp(earthWorldUp,alignment).normalize();
+  cam.fov=44;cam.near=Math.min(.1,Math.max(.00002,earthAltitudeKm/earthKmPerUnit*.02));
+  cam.updateProjectionMatrix();cam.lookAt(earthAim);
+  cam.rotateZ(-Math.sin(zoom*Math.PI)*.025);
+  nevadaTerrain.update(earthAltitudeKm,t);
+  renderer.render(scene,cam);
+  if(!storyCaption.hidden)positionEarthCaption(earth,storyCaption,isNevadaCaption);
+  // A review seek only draws a frame. Scene advance is a playback event and
+  // is emitted once per run, after the final frame has actually rendered.
+  if(playbackCompleted&&!earthHandoffSent){
+    earthHandoffSent=true;
+    if(parent!==window)parent.postMessage({type:'toga:intro-next',source:'solar-earth',transition:'nevada-descent',target:NEVADA_TARGET},location.origin);
+  }
+}
+if(IS_EARTH_INTRO){
+  window.EARTH_INTRO={
+    play(){if(earthTime>=earthDuration){earthTime=0;earthHandoffSent=false;}earthPlaying=true;clock.getDelta();earthPlayState();},
+    pause(){earthPlaying=false;earthPlayState();},
+    seek(t){earthPlaying=false;earthHandoffSent=false;earthTime=Math.max(0,Math.min(earthDuration,t));frameEarthIntro(0);earthPlayState();},
+    getState(){return{time:earthTime,playing:earthPlaying,duration:earthDuration,destination:'Nevada',target:NEVADA_TARGET,townConnected:false,altitudeKm:earthAltitudeKm,imagery:nevadaTerrain.getState(),handoff:{ready:earthTime>=earthDuration,sent:earthHandoffSent,transition:'nevada-descent'},lighting:{referenceHour:16,...nevadaLightingAt(earthTime),sourceColorBlend:bodies.find(b=>b.p.toga).p._sourceColorUniform.value,illustrative:true,photographicShadows:'preserved from source'},approach:{from:'geographic-southeast',headingProgress:earthHeadingProgress,obliqueProgress:earthObliqueProgress,elevationDeg:earthElevationDeg},particleOpacity:pmat.opacity,whiteExit:earthWash.style.opacity,texture:togaWorld.atlas.image.currentSrc,camera:cam.position.toArray()};}
+  };
+  document.getElementById('earth-play').onclick=()=>{if(earthPlaying)window.EARTH_INTRO.pause();else window.EARTH_INTRO.play();};
+  document.getElementById('earth-replay').onclick=()=>{window.EARTH_INTRO.seek(0);window.EARTH_INTRO.play();};
+  earthPlayState();frameEarthIntro(0);
+}
+let stargazingRendered=false;
+let skyMotion=!matchMedia('(prefers-reduced-motion: reduce)').matches||new URLSearchParams(location.search).get('motion')==='1';
+const updateSkyMotionLabel=()=>{const button=document.getElementById('sky-motion');button.textContent=skyMotion?'Pause sky':'Rotate sky';button.setAttribute('aria-label',skyMotion?'Pause constellation rotation':'Start constellation rotation');};
+document.getElementById('sky-motion').onclick=()=>{skyMotion=!skyMotion;updateSkyMotionLabel();};
+updateSkyMotionLabel();
+function frameStargazing(dt){
+  // The camera is still on the roof. Only the astronomical overlay responds
+  // to a revealed date; the shared horizon/star field never becomes an orbit.
+  cam.position.set(0,0,0);cam.up.set(0,1,0);
+  const pitch=62*Math.PI/180;
+  // Match the roof's final focus-plane height, so the sky handoff does not
+  // repeat the old wide-angle pull-back after the camera has settled.
+  const roofFrameHeight=Math.max(10.5,20/(innerWidth/innerHeight));
+  cam.fov=2*Math.atan(roofFrameHeight/(2*17))*180/Math.PI;cam.near=.1;
+  cam.updateProjectionMatrix();
+  cam.lookAt(0,Math.sin(pitch),-Math.cos(pitch));
+  cam.updateMatrixWorld(true);
+  if(skyMotion&&!document.hidden&&!REVEAL.cc)skyWheel.rotation.y+=dt*.024;
+  if(REVEAL.cc){
+    let delta=REVEAL.targetRot-skyWheel.rotation.y;
+    while(delta>Math.PI)delta-=Math.PI*2;
+    while(delta<-Math.PI)delta+=Math.PI*2;
+    skyWheel.rotation.y+=delta*Math.min(1,dt*1.4);
+  }
+  stargazingSky.update(cam,{night:1,flattening:0,rotation:skyWheel.rotation.y});
+  REVEAL.focus=REVEAL.cc?Math.min(1,REVEAL.focus+dt*.58):Math.max(0,REVEAL.focus-dt*1.8);
+  const skyArt=smooth(.8,2.5,T);
+  for(const cc of consts){
+    const selected=cc===REVEAL.cc;
+    const prominence=REVEAL.cc?(selected?1:.08):.2;
+    cc.points.visible=false;
+    cc.plane.material.opacity=skyArt*prominence*.68;
+    if(cc.label)cc.label.material.opacity=selected?REVEAL.focus*.92:0;
+    if(cc.flash)cc.flash.material.opacity=skyArt*(selected?.86:.28);
+    if(cc.flash2)cc.flash2.material.opacity=skyArt*(selected?.62:.16);
+    if(cc.lines)cc.lines.material.opacity=skyArt*(selected?.42:.12);
+  }
+  if(REVEAL.star){
+    REVEAL.star.material.opacity=REVEAL.cc?REVEAL.focus*.62:0;
+    REVEAL.star.scale.set(9,9,1);
+  }
+  renderer.render(scene,cam);
+  stargazingRendered=true;
+}
+if(IS_STARGAZING){
+  birthPill.classList.add('on');
+  birthPill.setAttribute('aria-label','Birthday instrument');
+  for(const [id,label] of [['bdM','Birth month'],['bdD','Birth day'],['bdY','Birth year']])document.getElementById(id).setAttribute('aria-label',label);
+  window.STARGAZING_BIRTH={
+    getState(){
+      const direction=new THREE.Vector3();cam.getWorldDirection(direction);
+      return{version:'stargazing-v1',ready:stargazingRendered,mode:SOLAR_MODE,
+        perspective:'school-rooftop-looking-up',camera:cam.position.toArray(),direction:direction.toArray(),
+        pitchDeg:62,fov:cam.fov,solarBodies:bodies.length,planetParticles:N,
+        solarLayerVisible:[sun,corona1,corona2,sunBillboard,sunHaze,belt,pcloud,stars1,stars2,dust,skyDome,moodDome].some(object=>object.visible),
+        skyRotation:skyWheel.rotation.y,skyMotion,alignment:'illustrative rotation, not a real sky ephemeris',loadedConstellations:consts.length,
+        selectedSign:REVEAL.cc?.cfg.slug||null,result:birthResult,
+        birthdayVisible:getComputedStyle(birthPill).opacity==='1',
+        date:{month:wM.idx+1,day:wD.idx+1,year:+YEARS[wY.idx]}};
+    }
+  };
+  frameStargazing(0);
+}
+function frame(){
+  ensureViewportSize();
+  _lastF=performance.now();
+  const elapsed=clock.getDelta(),dt=Math.min(0.05,elapsed);T+=dt;
+  if(IS_STARGAZING){frameStargazing(dt);return;}
+  if(IS_EARTH_INTRO){frameEarthIntro(elapsed);return;}
+  if(TOGA_APPROACH){frameTogaApproach(dt);renderer.render(scene,cam);return;}
+  // Let the Solar composition breathe before the long turn into Astrology.
+  // The former 18-second run made both worlds feel like a succession of cuts.
+  const prog=Math.min(1,T/24);
+  const assemble=smooth(0.0,0.20,prog);
+  const dissolve=smooth(0.16,0.34,prog);
+  // Hold the finished system on screen before beginning the panoramic turn.
+  const lookUp=smooth(0.50,0.95,prog);
+  // The astrology art belongs to the later look-up beat, never the planetary
+  // birthday view. This gate remains exactly zero until the camera has turned.
+  const astrology=smooth(0.58,0.76,prog);
+  const handoff=smooth(0.86,1.0,prog);
+
+  /* --- spiral particle birth --- */
+  if(pmat.opacity>0.01){
+    for(let i=0;i<N;i++){
+      const j=i*3,j4=i*4;
+      const r0=meta[j4],turns=meta[j4+1],tp=meta[j4+2],stag=meta[j4+3];
+      // staggered per-particle progress
+      const e=Math.max(0,Math.min(1,(assemble-stag*0.4)/0.6));
+      const ee=e*e*(3-2*e);
+      // spiral: direction rotates around Y as it comes in; radius eases in
+      const ang=turns*(1-ee)*Math.PI*2;
+      const ca=Math.cos(ang),sa=Math.sin(ang);
+      const dx=dir0[j],dy=dir0[j+1],dz=dir0[j+2];
+      const rx=dx*ca+dz*sa, rz=-dx*sa+dz*ca;             // rotated approach direction
+      const dist=r0*Math.pow(1-ee,1.6);
+      const bob=Math.sin(tp+ee*6.28)*4*(1-ee);
+      // body world centre
+      const ci=Math.floor(i/PPB);
+      let cx=0,cy=0,cz=0;
+      if(ci>0){const b=CAND[ci].body;b.mesh.getWorldPosition(_tmp);cx=_tmp.x;cy=_tmp.y;cz=_tmp.z;}
+      pos[j]  =cx+surf[j]  +rx*dist;
+      pos[j+1]=cy+surf[j+1]+dy*dist*0.6+bob;
+      pos[j+2]=cz+surf[j+2]+rz*dist;
+    }
+    pg.attributes.position.needsUpdate=true;
+  }
+  pmat.opacity=1-dissolve;
+  pcloud.visible=pmat.opacity>0.02;
+
+  /* --- planets solidify + run --- */
+  const solid=dissolve;
+  sun.material.opacity=solid;
+  corona1.material.opacity=.48*solid*(1-lookUp*.82);
+  corona2.material.opacity=.22*solid*(1-lookUp*.88);
+  sunBillboard.material.opacity=.72*solid*(1-lookUp*.78);
+  sunHaze.material.opacity=0;
+  belt.material.opacity=0.55*solid*(1-lookUp*0.5);
+  for(const b of bodies){
+    b.mat.opacity=solid;
+    if(solid>=0.999&&b.mat.transparent){b.mat.transparent=false;b.mat.needsUpdate=true;}
+    b.orbitRing.material.opacity=0.08*solid*(1-lookUp*0.8);
+    if(b.p._atmUniforms)b.p._atmUniforms.uOpacity.value=.64*solid;
+    if(b.p._waterUniforms){b.p._waterUniforms.uOpacity.value=solid;b.p._waterOptics.visible=solid>0.01;}
+    if(b.p._cloudUniforms){b.p._cloudUniforms.uTime.value=T;b.p._cloudUniforms.uOpacity.value=.76*solid;b.p._clouds.rotation.y+=dt*.006;}
+    if(b.p._rg){b.p._rg.visible=true;b.p._rg.material.opacity=0.6*solid;}
+    b.pivot.rotation.y+=b.p.spd*dt*(0.35+0.65*solid);
+    b.mesh.rotation.y+=dt*0.35;
+  }
+  sun.rotation.y+=dt*0.028;
+  corona1.rotation.y-=dt*.018;
+  corona2.rotation.y+=dt*.012;
+
+  /* --- sky: night sky + colour mood per facing constellation --- */
+  stars1.material.opacity=0.08+0.58*astrology;
+  stars2.material.opacity=(0.04+0.58*astrology)*(0.55+0.45*Math.sin(T*2.3));
+  dust.material.opacity=0.24*astrology*(0.75+0.25*Math.sin(T*1.7));
+  skyDome.material.opacity=0.95*astrology;
+  // which sign are we facing? (wheel rotates; aim azimuth 0)
+  if(consts.length&&astrology>0.05){
+    let best=null,bd=1e9;
+    for(const cc of consts){
+      if(Math.abs(cc.cfg.el)>50)continue;                       // poles don't drive the mood
+      let a=(cc.az+skyWheel.rotation.y)%(Math.PI*2);if(a>Math.PI)a-=Math.PI*2;if(a<-Math.PI)a+=Math.PI*2;
+      const dd=Math.abs(a);if(dd<bd){bd=dd;best=cc;}
+    }
+    if(best){
+      moodDome.material.color.lerp(best.fac,Math.min(1,dt*1.2));
+      moodDome.material.opacity+=(0.22*astrology-moodDome.material.opacity)*Math.min(1,dt*2);
+      // whisper-tint the deep background toward the sign — extremely subtle
+      const bg=scene.background;
+      _v.set(best.fac.r*0.06+0.008,best.fac.g*0.06+0.012,best.fac.b*0.08+0.045);
+      bg.lerp(new THREE.Color(_v.x,_v.y,_v.z),Math.min(1,dt*0.8));
+    }
+  }
+
+  /* --- camera: Sun-centered Solar frame → one long panoramic turn into Astrology.
+     While Solar owns the screen, lookAt(0,0,0) is the ground truth: the Sun is
+     optically centered instead of sagging below a camera perched high above it. */
+  const drift=smooth(0.0,0.30,prog);
+  // Give the elevated overview enough distance for Saturn's complete rings;
+  // remove that offset during the existing turn so Astrology is unchanged.
+  const camDist=190-28*smooth(0.0,0.52,prog)+34*(1-lookUp);
+  const rise=lookUp*lookUp*(3-2*lookUp);
+  const baseY=15+4*drift+(61+4*drift)*(1-lookUp);
+  const py=baseY+rise*55+Math.sin(T*.42)*.7*lookUp;
+  cam.position.set(Math.sin(T*.035)*3.4*(1-lookUp),py,camDist*(1-rise*.48));
+  const turn=smooth(0.50,0.96,prog);
+  const yaw=Math.PI*(1-turn);                         // orbit around, never snap through centre
+  const solarPitch=-Math.atan2(baseY,camDist);
+  const pitch=THREE.MathUtils.lerp(solarPitch,.29,turn);
+  _cameraForward.set(Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(yaw)*Math.cos(pitch));
+  REVEAL.focus=REVEAL.cc?Math.min(1,REVEAL.focus+dt*0.58):Math.max(0,REVEAL.focus-dt*1.8);
+  const focus=REVEAL.focus*REVEAL.focus*(3-2*REVEAL.focus);
+  cam.position.addScaledVector(_cameraForward,focus*40);
+  cam.position.x+=Math.sin(focus*Math.PI)*13;
+  cam.fov=44-focus*5;
+  cam.updateProjectionMatrix();
+  cam.up.set(0,1,0);
+  if(turn<.002){
+    cam.lookAt(0,0,0);
+  }else{
+    _cameraAim.copy(cam.position).addScaledVector(_cameraForward,500);
+    cam.lookAt(_cameraAim);
+  }
+  if(REVEAL.cc){                                             // your sign swings to face you
+    let dd=REVEAL.targetRot-skyWheel.rotation.y;
+    while(dd>Math.PI)dd-=Math.PI*2;while(dd<-Math.PI)dd+=Math.PI*2;
+    skyWheel.rotation.y+=dd*Math.min(1,dt*1.4);
+  }else if(astrology>0.2)skyWheel.rotation.y+=dt*0.018;      // the astrology sky turns
+  if(REVEAL.star){
+    const pu=0.6+0.4*Math.sin(T*2.6);
+    REVEAL.star.material.opacity=(REVEAL.cc?0.95*astrology:0)*pu;
+    const ss=9+3*Math.sin(T*2.6);REVEAL.star.scale.set(ss,ss,1);
+  }
+  if(prog>0.985&&birthPill&&!birthPill.classList.contains('on')){
+    document.documentElement.classList.add('astrology-ready');
+    playBirthEntrance();
+    birthPill.classList.add('on');
+  }
+
+  /* --- constellations: assemble → hand off to the real art --- */
+  const ca=smooth(0.68,0.90,prog);
+  for(const cc of consts){
+    if(ca>0&&handoff<1){
+      const cp=cc.points.geometry.attributes.position.array;
+      for(let i=0;i<cc.n;i++){const j=i*3;
+        const e=Math.max(0,Math.min(1,(ca-(i%cc.n)/cc.n*0.3)/0.7));
+        const ee=e*e*(3-2*e);
+        cp[j]  =cc.scat[j]  +(cc.home[j]  -cc.scat[j])*ee;
+        cp[j+1]=cc.scat[j+1]+(cc.home[j+1]-cc.scat[j+1])*ee;
+        cp[j+2]=cc.scat[j+2]+(cc.home[j+2]-cc.scat[j+2])*ee;
+      }
+      cc.points.geometry.attributes.position.needsUpdate=true;
+    }
+    cc.points.material.opacity=astrology*ca*(1-handoff);     // particles disappear…
+    cc.points.visible=cc.points.material.opacity>0.01;
+    cc.plane.material.opacity=astrology*(0.28*ca+0.72*handoff); // …the PNG art remains
+    if(cc.label)cc.label.material.opacity=astrology*(0.15*ca+0.85*handoff)*0.95;
+    if(cc.flash)cc.flash.material.opacity=astrology*handoff*(0.45+0.55*Math.abs(Math.sin(T*cc.speed+cc.phase)));
+    if(cc.flash2)cc.flash2.material.opacity=astrology*handoff*0.8;
+    if(cc.lines)cc.lines.material.opacity=astrology*handoff*0.22;
+  }
+  renderer.render(scene,cam);
+}
+function loop(){requestAnimationFrame(loop);if(!document.hidden)frame();}
+// fallback: keep time flowing whenever rAF starves (hidden tab, occluded window)
+setInterval(()=>{if(performance.now()-_lastF>80)frame();},40);
+window.__captureFrame=()=>{
+  ensureViewportSize();if(IS_STARGAZING)frameStargazing(0);else renderer.render(scene,cam);
+  return canvas.toDataURL('image/jpeg',.94);
+};
+
+window.SOLAR={get t(){return T},set t(v){T=v},replay(){
+    T=0;scene.background.set(0x02040c);
+    cancelBirthEntrance();birthEntrancePlayed=false;
+    if(IS_STARGAZING){
+      document.documentElement.classList.add('astrology-ready');birthPill.classList.add('on');
+      skyWheel.rotation.y=0;frameStargazing(0);return;
+    }
+    document.documentElement.classList.remove('astrology-ready');
+    birthPill?.classList.remove('on','is-entering','is-entered');
+  },
+  diag(){const direction=new THREE.Vector3();cam.getWorldDirection(direction);return{
+    camPos:cam.position.toArray().map(v=>+v.toFixed(0)),
+    camDir:direction.toArray().map(v=>+v.toFixed(3)),
+    fov:+cam.fov.toFixed(1),focus:+REVEAL.focus.toFixed(2),
+    loaded:consts.length,expected:CONSTELLATIONS.length,
+    sky:+skyDome.material.opacity.toFixed(2),mood:'#'+moodDome.material.color.getHexString()};}};
+loop();
+</script>
+</body>
+</html>

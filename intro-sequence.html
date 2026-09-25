@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<title>Toga — Birth, Solar, Hand, Globe</title>
+<style>
+  :root{ --gold:#b28f2b; --gold-hi:#d8b348; --ink:#e9e6dd; }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    color:var(--ink)}
+
+  /* Each stage is its own iframe so only one Three.js renderer exists at a
+     time. The last handoff returns to the approved interactive Globe. */
+  .stage{position:fixed;inset:0;border:0;width:100%;height:100%;
+    opacity:1;pointer-events:auto;background:#000}
+
+  /* A captured outgoing frame bridges the one-renderer handoff. This keeps the
+     motion continuous without keeping two live WebGL contexts fighting. */
+  #handoff-frame{position:fixed;inset:0;z-index:35;width:100%;height:100%;object-fit:cover;
+    opacity:0;pointer-events:none;transform:scale(1);transition:opacity 1.25s ease,transform 1.55s cubic-bezier(.2,.7,.2,1)}
+  #handoff-frame.on{opacity:1;transform:scale(1.018)}
+  #veil{position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;
+    transition:opacity 1.05s cubic-bezier(.32,.02,.18,1);z-index:40}
+  #veil.on{opacity:.78}
+  #logo-flight{position:fixed;inset:0;width:100%;height:100%;z-index:42;pointer-events:none}
+  body.earth-energy #veil,body.earth-energy #handoff-frame{transition:none}
+  body.earth-energy #handoff-frame.on{transform:scale(1)}
+
+  /* Until Blu supplies the current MacBook Air logo, do not invent or combine
+     marks. Keep only the useful skip action. */
+  #skip-intro{position:fixed;top:22px;left:26px;z-index:60;
+    display:block;width:auto;min-height:0;padding:0;text-decoration:none;text-align:left;
+    color:#eadb9e;opacity:.88;transition:opacity .24s ease,color .24s ease}
+  #skip-intro .brand-lockup{display:none}
+  #skip-intro span{font-size:11px;font-weight:650;line-height:1.25;letter-spacing:.17em;
+    text-transform:uppercase;text-shadow:0 1px 2px rgba(0,0,0,.95)}
+  #skip-intro:hover{opacity:1;color:#fff0ba}
+  #skip-intro:focus-visible{outline:2px solid #e5c86d;outline-offset:4px}
+  #skip-intro.leaving{opacity:0;pointer-events:none}
+  .review-globe #skip-intro{top:64px} /* Clear the Globe's existing Paper Map control. */
+
+  /* No bar, no pill, nothing across the top. Just two small arrows pinned to
+     the left/right edges at mid-height — the one band that is empty in all
+     three intros (they use their corners and their bottom strip). They sit
+     nearly transparent and only come up under the cursor. */
+  button.nav{position:fixed;top:50%;transform:translateY(-50%);z-index:50;
+    display:grid;place-items:center;width:44px;height:44px;padding:0;border-radius:50%;
+    background:rgba(10,11,16,.55);border:1px solid #ffffff1a;
+    color:#c9bf9a;font:inherit;font-size:17px;line-height:1;cursor:pointer;
+    opacity:.22;transition:opacity .25s ease,border-color .25s ease;
+    backdrop-filter:blur(6px)}
+  button.nav:hover{opacity:1;border-color:var(--gold)}
+  button.nav:focus-visible{opacity:1;outline:2px solid #e5c86d;outline-offset:4px}
+  button.nav:disabled{opacity:0;pointer-events:none}
+  #prev{left:14px}
+  #next{right:14px}
+
+  /* Stage ticks, bottom-left, tiny. Out of the way of every scene's controls. */
+  .dots{position:fixed;left:16px;bottom:14px;z-index:50;display:flex;gap:7px}
+  .dot{position:relative;width:18px;height:18px;border:0;background:transparent;
+    cursor:pointer;padding:0}
+  .dot::after{content:'';position:absolute;left:6px;top:6px;width:6px;height:6px;
+    border-radius:50%;background:#ffffff2b;transition:background .25s ease}
+  .dot[aria-current="true"]::after{background:var(--gold-hi)}
+  .dot:hover::after{background:#ffffff70}
+  .dot:focus-visible{outline:2px solid #e5c86d;outline-offset:3px;border-radius:50%}
+  @media (pointer:coarse){button.nav{opacity:.8}}
+
+  #label{display:none}
+  body.review-town .dots{bottom:auto;top:60px;left:20px}
+
+  #hint{position:fixed;right:66px;top:50%;transform:translateY(-50%);z-index:49;
+    font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+    color:#5f5a50;pointer-events:none;white-space:nowrap;
+    transition:opacity .6s ease}
+  #hint.hide{opacity:0}
+  body.earth-energy #hint{display:none}
+  /* When the menu hosts this shot it supplies the single /book-style Menu control. */
+  body.menu-hosted #skip-intro{display:none}
+  @media (max-width:600px){
+    #skip-intro{top:max(14px,env(safe-area-inset-top));left:max(14px,env(safe-area-inset-left));
+      width:auto;min-height:0}
+    #skip-intro span{font-size:10px;letter-spacing:.12em}
+    body.earth-energy button.nav{top:auto;bottom:8px;transform:none;
+      background:transparent;border:0;backdrop-filter:none;opacity:.8}
+    body.earth-energy #prev{left:auto;right:62px}
+    body.earth-energy button.nav:disabled{opacity:0}
+    body.earth-energy.review-town button.nav{top:50%;bottom:auto;transform:translateY(-50%)}
+    body.earth-energy.review-town #prev{left:14px;right:auto}
+  }
+  @media (max-resolution:.75dppx){
+    #skip-intro{top:30px;left:38px;width:auto;min-height:0}
+    #skip-intro span{font-size:20px;letter-spacing:.16em}
+  }
+  @media (max-width:600px) and (max-resolution:.75dppx){
+    #skip-intro{top:14px;left:14px;width:auto;min-height:0}
+    #skip-intro span{font-size:11px;letter-spacing:.1em}
+  }
+  @media (prefers-reduced-motion:reduce){
+    #veil,#handoff-frame,#skip-intro,#skip-intro img,button.nav,.dot::after,#hint{transition:none}
+  }
+</style>
+</head>
+<body>
+<script>if(new URLSearchParams(location.search).get('embed')==='menu'&&parent!==window)document.body.classList.add('menu-hosted');</script>
+
+<div id="veil"></div>
+<img id="handoff-frame" alt="" aria-hidden="true">
+
+<a id="skip-intro" href="menu.html" target="_top"
+   aria-label="Skip the intro and return to the main menu">
+  <span>Skip intro · Main menu</span>
+</a>
+
+<div id="hint">press <b>&rarr;</b> or click the right arrow</div>
+
+<div id="hud">
+  <span id="label"><b id="lb-n">I</b> &middot; <span id="lb-t">Birth + Solar</span></span>
+  <button class="nav ghost" id="prev" aria-label="Previous scene">&larr;</button>
+  <div class="dots" id="dots"></div>
+  <button class="nav" id="next" aria-label="Continue to next scene">&rarr;</button>
+</div>
+
+<script>
+/* Prepared by: Codex. One public intro; old cut parameters cannot reopen
+   the archived birthday/hand/globe journey or comet-flight experiments. */
+const STAGES = [
+  {t:'Original artwork',n:'I',src:'intro-comet.html?mode=opening&cut=earth-energy&autoplay=1&v=main-app-13',ownsArrowKeys:true},
+  {t:'Solar system to Nevada',n:'II',src:'intro-solar.html?mode=earth-intro&hold=1&v=main-app-13',ownsArrowKeys:true},
+  {t:'School and fireworks',n:'III',src:'intro-nevada.html?v=clear-rockets-4',ownsArrowKeys:true},
+];
+const COMET_STUDY=false;
+const EARTH_ENERGY=true;
+const REVIEW_CUT=false;
+let sequenceMotion=!matchMedia('(prefers-reduced-motion: reduce)').matches;
+document.body.classList.add('earth-energy');
+document.title='Spirit Striker: Earth and energy';
+// The sequence can run from localhost, a local file, the main domain, or the
+// intro subdomain. Every path returns to the one canonical Spirit Striker site.
+const INTRO_ENTRY_STATE_KEY = 'ss_intro_entry_v1';
+const IS_LOCAL_INTRO = location.protocol === 'file:' || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+const SPIRIT_STRIKER_BASE_URL = new URL('menu.html', location.href).href;
+const SPIRIT_STRIKER_URL = new URL('?intro=album', SPIRIT_STRIKER_BASE_URL).href;
+const SPIRIT_STRIKER_SKIP_URL = new URL('?intro=skipped', SPIRIT_STRIKER_BASE_URL).href;
+
+function rememberIntroState(patch){
+  if(REVIEW_CUT)return; // Reviewing either cut must not alter visitor state.
+  let state={};
+  try{state=JSON.parse(localStorage.getItem(INTRO_ENTRY_STATE_KEY)||'{}')}catch(_){}
+  state=Object.assign({},state,patch,{updatedAt:Date.now()});
+  try{localStorage.setItem(INTRO_ENTRY_STATE_KEY,JSON.stringify(state))}catch(_){}
+  if(location.protocol==='https:'&&/(^|\.)spiritstriker\.app$/i.test(location.hostname)){
+    document.cookie=INTRO_ENTRY_STATE_KEY+'='+encodeURIComponent(JSON.stringify(state))+
+      '; Max-Age=31536000; Path=/; Domain=.spiritstriker.app; SameSite=Lax; Secure';
+  }
+}
+
+const frames = [];
+let cur = -1, busy = false, leavingSite = false, queuedStage = null;
+let introResult = null;
+// Preload the tiny Canvas2D bridge, not a second WebGL scene. Both sides of
+// this handoff draw the same deterministic logo particles at the same time.
+const logoVortex=COMET_STUDY
+  ? import('./intro-logo-vortex.js?v=originals-v2').then(m=>m.loadLogoVortex()).catch(error=>{console.warn('Logo bridge unavailable',error);return null;})
+  : Promise.resolve(null);
+
+const $ = id => document.getElementById(id);
+// Warm the Earth image only for this cut; original-art/portal playback lives
+// in the existing opening canvas with its own Pause, Replay and scrubber.
+if(EARTH_ENERGY){
+  const earthPreload=new Image();earthPreload.src='assets/intro-earth-energy-v1/earth-nasa-july-5400.jpg';
+}
+
+// Normally mount only the current stage. The Earth review alone preloads its
+// one WebGL scene behind a Canvas2D/video opening. Other stage replacements
+// remove the old browsing context before creating the next WebGL renderer.
+function ensure(i){
+  if(i < 0 || i >= STAGES.length) return null;
+  if(frames[i]) return frames[i];
+  const f = document.createElement('iframe');
+  f.className = 'stage';
+  f.src = STAGES[i].src;
+  f.setAttribute('allow','camera; microphone; fullscreen');
+  f.setAttribute('title', STAGES[i].t);
+  document.body.appendChild(f);
+  frames[i] = f;
+  return f;
+}
+
+function preloadEarth(){
+  if(!EARTH_ENERGY||cur!==0)return;
+  // The opening is Canvas2D/video, so this still allocates only ONE WebGL
+  // context. Warm the incoming scene invisibly, then reveal its actual frame.
+  const f=ensure(1);f.style.visibility='hidden';f.setAttribute('aria-hidden','true');
+}
+
+function captureCurrentStage(){
+  const f=frames[cur],still=$('handoff-frame');
+  if(!f)return false;
+  try{
+    const data=f.contentWindow.__captureFrame?.();
+    if(!data)return false;
+    still.src=data;still.classList.add('on');return true;
+  }catch(error){return false;}
+}
+
+async function prepareCapturedStill(hadStill){
+  if(!hadStill)return false;
+  try{
+    await $('handoff-frame').decode();
+    // Let the decoded image participate in the next composite before the
+    // underlying browsing context and its WebGL resources are released.
+    await new Promise(resolve=>requestAnimationFrame(resolve));
+    return true;
+  }catch(error){console.warn('Intro handoff capture could not decode',error);return false;}
+}
+
+function releaseEarthCutFrames(keep){
+  frames.forEach((f,k)=>{
+    if(!f||k===keep)return;
+    try{
+      if(f.contentWindow.EARTH_INTRO){
+        f.contentWindow.EARTH_INTRO.pause();
+        const canvas=f.contentDocument.getElementById('gl');
+        const gl=canvas?.getContext('webgl2')||canvas?.getContext('webgl');
+        gl?.getExtension('WEBGL_lose_context')?.loseContext();
+      }
+      f.contentWindow.NEVADA_INTRO?.dispose?.();
+    }catch(error){console.warn('Intro scene resource release',error);}
+    f.remove();frames[k]=null;
+  });
+}
+
+function updateStageControls(i){
+  cur=i;
+  document.body.classList.toggle('review-globe',COMET_STUDY&&STAGES[i].src.startsWith('globe.html'));
+  document.body.classList.toggle('review-town',EARTH_ENERGY&&STAGES[i].src.startsWith('intro-nevada.html'));
+  $('lb-n').textContent=STAGES[i].n;$('lb-t').textContent=STAGES[i].t;
+  $('prev').disabled=i===0;$('next').disabled=i===STAGES.length-1;
+  $('next').textContent='→';
+  [...$('dots').children].forEach((d,k)=>d.setAttribute('aria-current',String(k===i)));
+  $('hint').classList.toggle('hide',i!==0);$('hint').setAttribute('aria-hidden',String(i!==0));
+  (i===STAGES.length-1?$('prev'):$('next')).focus({preventScroll:true});
+}
+
+async function flyIntoSolar(i){
+  busy=true;
+  const outgoing=frames[cur];
+  outgoing?.contentWindow.introStudy?.pause();
+  const effect=await logoVortex;
+  if(!effect){busy=false;go(i,{plain:true});return;}
+  const canvas=document.createElement('canvas');canvas.id='logo-flight';canvas.setAttribute('aria-hidden','true');document.body.appendChild(canvas);
+  const ctx=canvas.getContext('2d');let bridgeTime=2,last=performance.now(),solarReady=false,finished=false;
+  const born=performance.now();
+  function paint(){
+    const dpr=Math.min(2,devicePixelRatio||1),w=innerWidth,h=innerHeight;
+    if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}
+    ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);effect.draw(ctx,bridgeTime,w,h);
+  }
+  paint();
+  // The running overlay covers the swap. The incoming solar renderer keeps
+  // its own real particle birth; no snapshot gets enlarged or dissolved here.
+  frames.forEach((f,k)=>{if(f){f.remove();frames[k]=null;}});
+  $('handoff-frame').classList.remove('on');$('handoff-frame').removeAttribute('src');$('veil').classList.remove('on');
+  const f=ensure(i);updateStageControls(i);
+  f.addEventListener('load',()=>{
+    f.contentWindow.addEventListener('keydown',event=>{
+      if(frames[cur]===f)handleIntroKey(event,{fromStage:true,ownsArrowKeys:STAGES[i].ownsArrowKeys});
+    });
+  },{once:true});
+  const finish=()=>{
+    if(finished)return;finished=true;canvas.remove();busy=false;
+    if(queuedStage!==null){const destination=queuedStage;queuedStage=null;go(destination);}
+  };
+  const tick=now=>{
+    if(finished)return;
+    const dt=document.hidden?0:Math.min(.1,(now-last)/1000);last=now;
+    try{if(!solarReady&&f.contentWindow.SOLAR){f.contentWindow.SOLAR.replay();solarReady=true;}}catch(_){}
+    // Keep the living tunnel over loading, then reveal the assembled system.
+    // An eight-second escape never strands the usable stage controls.
+    bridgeTime=Math.min(solarReady?5.1:2.95,bridgeTime+dt);
+    paint();
+    if(bridgeTime>=5.1||now-born>8000){finish();return;}
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+async function energyIntoSolar(i,animate=true){
+  busy=true;
+  frames[cur]?.contentWindow.introStudy?.pause();
+  frames[cur]?.contentWindow.NEVADA_INTRO?.pause();
+  const outgoing=frames[cur];
+  // The entire generated portal now runs under the original artwork in the
+  // outgoing canvas. Do not restart a second copy of the portal here.
+  const hadStill=captureCurrentStage();$('veil').classList.remove('on');
+  // Returning from the perspective town also crosses two WebGL scenes.
+  // Keep only its decoded still while the incoming Earth renderer is created.
+  if(outgoing?.contentWindow.NEVADA_INTRO&&await prepareCapturedStill(hadStill))releaseEarthCutFrames(i);
+  const f=ensure(i);
+  let finished=false,solarReady=false;
+  const born=performance.now();
+  const finish=()=>{
+    if(finished)return;finished=true;
+    frames.forEach((other,k)=>{if(other&&k!==i){other.remove();frames[k]=null;}});
+    f.style.visibility='visible';f.removeAttribute('aria-hidden');updateStageControls(i);
+    if(solarReady){if(animate)f.contentWindow.EARTH_INTRO.play();else f.contentWindow.EARTH_INTRO.seek(f.contentWindow.EARTH_INTRO.getState().duration);}
+    const still=$('handoff-frame');
+    const release=()=>{
+      still.classList.remove('on');still.removeAttribute('src');
+      busy=false;
+      if(queuedStage!==null){const destination=queuedStage;queuedStage=null;go(destination);}
+    };
+    if(animate&&still.classList.contains('on')){
+      const fade=still.animate([{opacity:1},{opacity:0}],{duration:220,easing:'ease-out'});
+      fade.onfinish=()=>{fade.cancel();release();};
+    }else release();
+  };
+  const tick=()=>{
+    if(finished)return;
+    solarReady=Boolean(f.contentWindow.EARTH_INTRO);
+    if(solarReady||performance.now()-born>20000){finish();return;}
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+async function descendIntoTown(i){
+  busy=true;
+  frames[cur]?.contentWindow.EARTH_INTRO?.pause();
+  frames[cur]?.contentWindow.introStudy?.pause();
+  const hadStill=captureCurrentStage();
+  // The town is now true perspective WebGL, not the former Canvas2D adapter.
+  // Defer its creation until the outgoing scene has become a decoded still.
+  // If capture fails, retain the old scene until readiness to avoid a blank.
+  if(await prepareCapturedStill(hadStill))releaseEarthCutFrames(i);
+  const f=ensure(i),still=$('handoff-frame'),born=performance.now();
+  f.style.visibility='hidden';f.setAttribute('aria-hidden','true');
+  const tick=()=>{
+    const api=f.contentWindow.NEVADA_INTRO;
+    if(!api?.getState().ready&&!api?.getState().error&&performance.now()-born<15000){requestAnimationFrame(tick);return;}
+    releaseEarthCutFrames(i);
+    f.style.visibility='visible';f.removeAttribute('aria-hidden');updateStageControls(i);
+    $('veil').classList.remove('on');
+    if(api?.getState().ready){api.seek(0);if(sequenceMotion)api.play();}
+    const finish=()=>{
+      still.classList.remove('on');still.removeAttribute('src');busy=false;
+      if(queuedStage!==null){const destination=queuedStage;queuedStage=null;go(destination);}
+    };
+    if(still.classList.contains('on')&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
+      // Both views now share physical ENU orientation, 44-degree FOV and 12km
+      // altitude. A short registered dissolve avoids the old enlarged photo
+      // drifting against an unrelated moving perspective beneath it.
+      const fade=still.animate([{opacity:1,transform:'scale(1)'},{opacity:0,transform:'scale(1)'}],{duration:320,easing:'ease-out'});
+      fade.onfinish=()=>{fade.cancel();finish();};
+    }else finish();
+  };
+  requestAnimationFrame(tick);
+}
+
+async function lookIntoNight(i){
+  busy=true;
+  frames[cur]?.contentWindow.NEVADA_INTRO?.pause();
+  const hadStill=captureCurrentStage(),still=$('handoff-frame');
+  if(await prepareCapturedStill(hadStill))releaseEarthCutFrames(i);
+  const f=ensure(i),born=performance.now();
+  f.style.visibility='hidden';f.setAttribute('aria-hidden','true');
+  const tick=()=>{
+    const api=f.contentWindow.STARGAZING_BIRTH;
+    if(!api?.getState().ready&&performance.now()-born<20000){requestAnimationFrame(tick);return;}
+    releaseEarthCutFrames(i);f.style.visibility='visible';f.removeAttribute('aria-hidden');updateStageControls(i);$('veil').classList.remove('on');
+    const finish=()=>{
+      still.classList.remove('on');still.removeAttribute('src');busy=false;
+      if(queuedStage!==null){const destination=queuedStage;queuedStage=null;go(destination);}
+    };
+    if(hadStill&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
+      const fade=still.animate([{opacity:1},{opacity:0}],{duration:850,easing:'ease-in-out'});
+      fade.onfinish=()=>{fade.cancel();finish();};
+    }else finish();
+  };
+  requestAnimationFrame(tick);
+}
+
+function go(i,{plain=false,vortex=false}={}){
+  if(i < 0 || i >= STAGES.length) return;
+  // A click during the crossfade should never be thrown away. Keep the latest
+  // requested destination and run it as soon as the active renderer settles.
+  if(busy){queuedStage=i;return;}
+  if(i === cur)return;
+  if(EARTH_ENERGY&&i===3){lookIntoNight(i);return;}
+  if(EARTH_ENERGY&&i===2){descendIntoTown(i);return;}
+  if(EARTH_ENERGY&&i===1){energyIntoSolar(i,vortex||!matchMedia('(prefers-reduced-motion: reduce)').matches);return;}
+  if(!plain&&COMET_STUDY&&cur===0&&i===1&&(vortex||!matchMedia('(prefers-reduced-motion: reduce)').matches)){flyIntoSolar(i);return;}
+  busy = true;
+  const veil = $('veil');
+  const still=$('handoff-frame');
+  const hadStill=captureCurrentStage();
+  veil.classList.add('on');
+
+  setTimeout(() => {
+    frames.forEach((f, k) => {
+      if(!f) return;
+      f.remove();
+      frames[k] = null;
+    });
+    const f = ensure(i);
+    f.classList.add('on');
+    updateStageControls(i);
+
+    let revealed=false;
+    const reveal=()=>{
+      if(revealed)return;revealed=true;
+      // Give the incoming renderer one painted frame, then dissolve the still
+      // and veil together. A timeout remains only as a load-failure escape.
+      setTimeout(()=>{
+        veil.classList.remove('on');
+        if(hadStill)still.classList.remove('on');
+        setTimeout(()=>{
+          still.removeAttribute('src');busy=false;
+          if(EARTH_ENERGY&&i===0)preloadEarth();
+          if(queuedStage!==null){const nextStage=queuedStage;queuedStage=null;go(nextStage);}
+        },EARTH_ENERGY?0:1300);
+      },EARTH_ENERGY?0:240);
+    };
+    f.addEventListener('load',()=>{
+      // Keyboard events do not bubble out of an iframe. Listen inside each
+      // same-origin scene after load, while keeping its own travel controls.
+      if(f.contentDocument){
+        f.contentWindow.addEventListener('keydown',event=>{
+          if(frames[cur]===f)handleIntroKey(event,{fromStage:true,ownsArrowKeys:STAGES[i].ownsArrowKeys});
+        });
+      }
+      reveal();
+    },{once:true});
+    setTimeout(reveal,3200);
+  }, EARTH_ENERGY?0:hadStill?620:80);
+}
+
+$('dots').innerHTML = STAGES.map((s,i) =>
+  `<button class="dot" data-i="${i}" title="${s.t}" aria-label="${s.t}" aria-current="false"></button>`
+).join('');
+[...$('dots').children].forEach(d =>
+  d.onclick = () => go(+d.dataset.i));
+
+$('next').onclick = () => go(cur + 1);
+$('prev').onclick = () => go(cur - 1);
+
+function leaveForSpiritStriker(result,{skip=false}={}){
+  if(leavingSite)return;
+  leavingSite=true;
+  rememberIntroState(skip
+    ? {visitor:true,choice:'enter',introStarted:true}
+    : {visitor:true,choice:'watch',introStarted:true,introSeen:true});
+  $('skip-intro').classList.add('leaving');
+  $('veil').classList.add('on');
+  if(EARTH_ENERGY){
+    $('veil').style.transition='opacity 1.05s ease';
+    $('veil').style.opacity='1';
+    frames[cur]?.contentWindow.NEVADA_INTRO?.pause();
+    setTimeout(()=>{
+      if(parent!==window&&new URLSearchParams(location.search).get('embed')==='menu')parent.postMessage({type:'spirit-strikers-close'},location.origin);
+      else {
+        // Old saved study links also return to the one current menu, never a
+        // version-pinned experiment. The public intro subdomain exits to the site.
+        location.assign(SPIRIT_STRIKER_BASE_URL);
+      }
+    },1100);
+    return;
+  }
+  const destination=new URL(skip?SPIRIT_STRIKER_SKIP_URL:SPIRIT_STRIKER_URL);
+  if(!skip&&result){
+    if(result.slug)destination.searchParams.set('striker',result.slug);
+    if(result.born)destination.searchParams.set('born',result.born);
+  }
+  setTimeout(()=>location.assign(String(destination)),450);
+}
+$('skip-intro').addEventListener('click',e=>{
+  e.preventDefault();
+  leaveForSpiritStriker(null,{skip:true});
+});
+
+// Child scenes own their story controls. The parent owns stage replacement and
+// the final top-level navigation, so neither destination can be trapped inside
+// the iframe.
+addEventListener('message', e => {
+  const activeFrame=frames[cur];
+  if(e.origin!==location.origin||!activeFrame||e.source!==activeFrame.contentWindow)return;
+  if(e.data?.type==='toga:intro-birth-result'&&e.data.result){
+    introResult=e.data.result;
+  }else if(e.data?.type==='toga:intro-next'&&cur<STAGES.length-1){
+    if(e.data.transition==='logo-vortex'||e.data.transition==='nevada-descent')sequenceMotion=true;
+    go(cur+1,{vortex:e.data.transition==='logo-vortex'});
+  }else if(e.data?.type==='toga:intro-next'&&EARTH_ENERGY&&cur===STAGES.length-1&&!leavingSite){
+    leaveForSpiritStriker(null);
+  }else if(e.data?.type==='toga:intro-complete'&&cur===STAGES.length-1&&!leavingSite){
+    leaveForSpiritStriker(e.data.result||introResult);
+  }
+});
+
+function handleIntroKey(event,{fromStage=false,ownsArrowKeys=false}={}){
+  if(event.defaultPrevented||event.repeat||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey)return;
+  // Inputs, sliders and editable text keep their arrows. Space/Enter on a
+  // focused button must activate that button, including Previous and the dots.
+  if(event.target?.closest?.('input,textarea,select,button,a,[contenteditable]:not([contenteditable="false"]),[role="slider"],[role="spinbutton"],[role="textbox"]')){
+    if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
+    if(fromStage||!event.target.closest('#hud'))return;
+  }
+  if(fromStage&&ownsArrowKeys)return;
+  const forward=event.key==='ArrowRight'||(!fromStage&&event.key===' ');
+  const backward=event.key==='ArrowLeft';
+  if(!forward&&!backward)return;
+  const button=$(forward?'next':'prev');
+  if(button.disabled)return;
+  event.preventDefault();
+  button.click();
+}
+addEventListener('keydown',handleIntroKey);
+
+/* No idle auto-hide. An iframe swallows the parent document's mousemove, so
+   any "fade out, wake on movement" scheme strands the user: once the chrome
+   hides while the cursor is over a stage, nothing can bring it back and the
+   sequence becomes unnavigable. The arrow controls instead rest at low opacity
+   and come up to full on hover, which needs no parent-level mouse tracking. */
+go(0);
+rememberIntroState({visitor:true,choice:'watch',introStarted:true});
+</script>
+</body>
+</html>

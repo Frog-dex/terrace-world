@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spirit Striker · Opening study</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#fff;color:#171717;font:14px/1.4 system-ui,sans-serif}
+main{position:fixed;inset:0}#scene,#ink{position:absolute;inset:0;width:100%;height:100%}#ink{pointer-events:none}
+#fallback{position:absolute;inset:0;display:grid;place-content:center;background:#000;color:#fff;text-align:center;padding:40px}
+#fallback img{width:min(94vw,1600px);height:auto;margin:auto}#fallback p{max-width:34em;margin:12px auto}
+.ready #fallback{display:none}body.dark{background:#000;color:#e4e4e4}
+nav{position:fixed;left:50%;bottom:32px;transform:translateX(-50%);display:flex;align-items:center;gap:16px;max-width:calc(100% - 104px);padding:9px 12px;background:rgba(255,255,255,.94);color:#171717;z-index:4;border-radius:3px}
+.dark nav{background:none;color:#eee1bf;text-shadow:0 1px 3px #000}
+button,a{font:inherit;color:inherit}button{background:none;border:0;padding:7px 5px;cursor:pointer;white-space:nowrap}button:hover,a:hover{color:#927033}button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid currentColor;outline-offset:3px}button:disabled{opacity:.45;cursor:wait}
+input{width:clamp(80px,20vw,250px);accent-color:#9d8456;cursor:pointer}output{font-variant-numeric:tabular-nums;min-width:4.2em;text-align:right;font-size:12px}#next{font-weight:600}#note{position:fixed;top:24px;right:30px;font-size:12px;max-width:240px;text-align:right;opacity:.7;z-index:3}#error{position:fixed;left:24px;right:24px;top:75px;background:#fff;color:#171717;padding:12px;z-index:10}#error:empty{display:none}
+@media(max-width:600px){nav{bottom:42px;max-width:calc(100% - 26px);gap:8px;padding:7px 9px;font-size:12px}input{width:75px}output{display:none}#note{right:18px;top:18px;font-size:11px;max-width:180px}}
+@media(pointer:coarse){nav button,nav input{min-height:44px}}
+</style>
+<style>nav{background:none;padding:0;gap:12px}nav button{min-height:44px}body.embedded #note{display:none}html.play-presentation nav,html.play-presentation #note{display:none}</style>
+<script>if(parent!==window&&new URLSearchParams(location.search).get('presentation')==='play')document.documentElement.classList.add('play-presentation');</script>
+</head>
+<body>
+<script>if(parent!==window)document.body.classList.add('embedded');</script>
+<main aria-label="Spirit Striker animation study">
+  <canvas id="scene" aria-label="Planet and comet"></canvas>
+  <canvas id="ink" aria-label="Original Spirit Striker art in motion"></canvas>
+  <div id="fallback"><img src="assets/intro-originals-v2/designed-by-blu-caption-below.png" alt="Blu Inman signature, Designed by"><p id="loading">Loading the original artwork…</p><noscript><style>#loading,nav{display:none}</style>This animation requires JavaScript. The original artwork and website remain available.</noscript><a href="intro-sequence.html">Open existing intro</a></div>
+</main>
+<div id="note">Motion study · existing artwork</div>
+<div id="error" role="status"></div>
+<nav aria-label="Animation playback">
+  <button id="play" type="button" disabled>Play</button>
+  <button id="replay" type="button" disabled>Replay</button>
+  <input id="time" type="range" min="0" max="16" step="0.01" value="0" aria-label="Animation time" disabled>
+  <output id="clock" for="time">0.0 / 16</output>
+  <button id="next" type="button" disabled>Continue</button>
+</nav>
+<script type="module" src="intro-comet.js?v=current-opening-13"></script>
+</body>
+</html>

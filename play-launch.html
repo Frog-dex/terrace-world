@@ -1,0 +1,34 @@
+<!doctype html>
+<!-- Prepared by: Codex. Play-only transition; original opening assets stay unchanged. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Spirit Striker · Play</title>
+  <script>if(parent===window)document.documentElement.classList.add('standalone');</script>
+  <link rel="stylesheet" href="play-launch.css?v=portal-aperture-13">
+</head>
+<body>
+  <main id="launch" aria-label="Spirit Striker opening">
+    <iframe id="opening" title="Original Spirit Striker creature opening" allow="autoplay" tabindex="-1" hidden></iframe>
+    <iframe id="destination" src="terrace-world.html" title="Terrace World" tabindex="-1" hidden></iframe>
+    <div id="portal" aria-hidden="true">
+      <video id="portal-film" muted loop playsinline preload="auto"></video>
+      <img id="portal-mark" src="images/striker-symbol-gold.png" alt="">
+    </div>
+    <div id="black" aria-hidden="true"></div>
+    <div id="white" aria-hidden="true"></div>
+    <section id="loading" aria-live="polite">
+      <img src="images/striker-symbol-gold.png" alt="Spirit Striker symbol">
+      <p id="message">Opening Spirit Striker…</p>
+      <a href="terrace-world.html" id="fallback-link">Continue to Terrace World</a>
+      <noscript><p>Animation requires JavaScript. You can still open the Play preview.</p></noscript>
+    </section>
+  </main>
+  <nav aria-label="Opening controls">
+    <a id="back" href="menu.html">Back to menu</a>
+    <div><button id="pause" type="button" disabled>Pause</button><a id="skip" href="terrace-world.html">Skip</a></div>
+  </nav>
+  <script type="module" src="play-launch.js?v=portal-aperture-13"></script>
+</body>
+</html>

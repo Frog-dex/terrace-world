@@ -5665,36 +5665,34 @@ addEventListener('pagehide', saveGame); document.addEventListener('visibilitycha
 
 requestAnimationFrame(frame);
 
-/* ================= friends: simple peer-to-peer multiplayer (host a room, others join by link) ================= */
+/* ================= friends: one shared world lobby (auto-join, no codes) =================
+   Blu's rule (2026-09-25): no room codes, no hosting. Open the game, you're in the lobby.
+   Same serverless mesh as mp-test.html (trystero, appId frog-dex-terrace-world), its own room. */
 (() => {
-  const PREFIX = 'terrace-world-room-', LIB = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
+  const APP_ID = 'frog-dex-terrace-world', ROOM = 'world-lobby';
+  const TRYSTERO = 'https://cdn.jsdelivr.net/npm/trystero@0.25.4/+esm';
   const COLORS = ['#f2c14e','#6fcf7f','#7fb6ff','#ef6b5b','#c58cf2','#5fd6d0','#ff9d5c'];
-  const MP = { peer:null, host:false, conn:null, conns:new Map(), others:new Map(), code:null, sendT:0, myColor:COLORS[0] };
+  const colorFor = id => COLORS[[...String(id)].reduce((h,c) => (h*31 + c.charCodeAt(0)) >>> 0, 7) % COLORS.length];
+  const MP = { room:null, send:null, others:new Map(), connected:false, sendT:0, myColor:COLORS[0], retrying:false };
+  window.__MP = MP;   // debug handle only — nothing in the game reads it
   let nameVal = 'Friend'; try { nameVal = localStorage.getItem('twName') || 'Friend'; } catch(e){}
 
-  /* ---- button + panel ---- */
+  /* ---- button + panel: presence only, nothing to set up ---- */
   const row = document.getElementById('photoBtn') && document.getElementById('photoBtn').parentNode;
   const btn = document.createElement('button');
-  btn.className = 'btn craftBtn'; btn.id = 'friendsBtn'; btn.title = 'Play with friends'; btn.textContent = 'Friends';
+  btn.className = 'btn craftBtn'; btn.id = 'friendsBtn'; btn.title = 'Who is in the world'; btn.textContent = 'Friends';
   if (row) row.appendChild(btn);
   const panel = document.createElement('div');
   panel.id = 'friendsPanel'; panel.hidden = true;
   panel.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:60;width:min(360px,92vw);background:#fbf7ee;color:#1d2433;border:2.5px solid #1d2433;border-radius:14px;padding:14px;font:14px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.25)';
   panel.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <strong style="font-size:16px">Play with friends</strong>
+      <strong style="font-size:16px">World lobby</strong>
       <button class="btn" id="fpClose" type="button">Close</button></div>
     <label style="display:flex;gap:8px;align-items:center;margin-bottom:8px">Name
       <input id="fpName" maxlength="14" style="flex:1;min-width:0;padding:6px 8px;border:1.5px solid #1d2433;border-radius:8px;font:inherit"></label>
-    <div id="fpLobby" style="display:flex;gap:6px;flex-wrap:wrap">
-      <button class="btn primary" id="fpHost" type="button">Host a room</button>
-      <input id="fpCode" placeholder="Code" maxlength="6" style="width:90px;text-transform:uppercase;padding:6px 8px;border:1.5px solid #1d2433;border-radius:8px;font:inherit">
-      <button class="btn" id="fpJoin" type="button">Join</button></div>
-    <div id="fpShare" hidden style="margin-top:10px">
-      Room <b id="fpRoom" style="letter-spacing:2px;font-family:ui-monospace,Menlo,monospace"></b>
-      <div style="display:flex;gap:6px;margin-top:6px"><input id="fpLink" readonly style="flex:1;min-width:0;padding:6px 8px;border:1.5px solid #1d2433;border-radius:8px;font:12px ui-monospace,Menlo,monospace">
-      <button class="btn" id="fpCopy" type="button">Copy</button></div></div>
-    <p id="fpStatus" style="margin:10px 0 4px;color:#5a6477">Host a room, then send the link to a friend.</p>
+    <button class="btn" id="fpCopy" type="button" style="width:100%;margin-bottom:4px">Copy game link</button>
+    <p id="fpStatus" style="margin:10px 0 4px;color:#5a6477">Joining the world…</p>
     <ul id="fpList" style="list-style:none;padding:0;margin:0"></ul>`;
   document.body.appendChild(panel);
   const $f = id => document.getElementById(id);
@@ -5702,18 +5700,26 @@ requestAnimationFrame(frame);
   panel.addEventListener('keydown', e => e.stopPropagation());
   panel.addEventListener('keyup', e => e.stopPropagation());
   $f('fpName').addEventListener('change', () => { nameVal = ($f('fpName').value.trim() || 'Friend').slice(0,14); try { localStorage.setItem('twName', nameVal); } catch(e){} });
-  btn.onclick = () => { panel.hidden = !panel.hidden; };
+  btn.onclick = () => { panel.hidden = !panel.hidden; if (!panel.hidden) renderList(); };
   $f('fpClose').onclick = () => { panel.hidden = true; };
-  $f('fpCopy').onclick = async () => { try { await navigator.clipboard.writeText($f('fpLink').value); $f('fpCopy').textContent = 'Copied'; } catch(e){ $f('fpLink').select(); } };
   const status = (m, bad) => { $f('fpStatus').textContent = m; $f('fpStatus').style.color = bad ? '#c0392b' : '#2e7d32'; };
+  // One link is all a friend needs — everyone lands in the same world lobby.
+  const GAME_LINK = 'https://frog-dex.github.io/terrace-world/';
+  $f('fpCopy').onclick = () => {
+    const done = () => status('Link copied — send it to a friend.');
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(GAME_LINK).then(done, () => prompt('Copy the game link:', GAME_LINK));
+    else prompt('Copy the game link:', GAME_LINK);
+  };
 
   function renderList(){
     const ul = $f('fpList'); ul.innerHTML = '';
     const add = (name, color, you) => { const li = document.createElement('li'); li.style.cssText = 'display:flex;gap:8px;align-items:center;padding:3px 0';
       li.innerHTML = `<span style="width:11px;height:11px;border-radius:50%;background:${color}"></span><span></span>`; li.lastChild.textContent = name + (you ? ' (you)' : ''); ul.appendChild(li); };
-    if (MP.peer && (MP.host || MP.conn)) add(nameVal, MP.myColor, true);
+    if (MP.connected) add(nameVal, MP.myColor, true);
     for (const o of MP.others.values()) add(o.name, o.color, false);
-    btn.textContent = MP.others.size ? `Friends · ${MP.others.size}` : 'Friends';
+    const total = MP.others.size + (MP.connected ? 1 : 0);
+    btn.textContent = MP.connected ? `Friends · ${total}` : 'Friends';
+    if (MP.connected) status(MP.others.size ? `${total} players in the world right now.` : 'You are in. No one else online yet — send someone the game link.');
   }
 
   /* ---- remote frogs: a Walker each, plus a name tag ---- */
@@ -5756,12 +5762,11 @@ requestAnimationFrame(frame);
   const origWorldFrame = worldFrame;
   worldFrame = function(dt){
     origWorldFrame(dt);
-    if (!MP.peer) return;
+    if (!MP.connected) return;
     MP.sendT -= dt;
     if (MP.sendT <= 0){
-      MP.sendT = 1/12; const s = myState();
-      if (MP.host){ s.id = 'host'; for (const c of MP.conns.values()) if (c.open) c.send(s); }
-      else if (MP.conn && MP.conn.open) MP.conn.send(s);
+      MP.sendT = 1/12;
+      try { MP.send && MP.send(myState()); } catch(e){}
     }
     const k = Math.min(1, dt*10);
     for (const o of MP.others.values()){
@@ -5775,71 +5780,47 @@ requestAnimationFrame(frame);
     }
   };
 
-  /* ---- networking ---- */
-  function loadLib(){
-    return new Promise((res, rej) => {
-      if (window.Peer) return res();
-      const s = document.createElement('script'); s.src = LIB; s.onload = res; s.onerror = () => rej(new Error('lib')); document.head.appendChild(s);
+  /* ---- networking: auto-join the one shared lobby; rejoin after a failed handshake ---- */
+  function joinLobby(lib){
+    MP.retrying = false;
+    const room = lib.joinRoom({ appId: APP_ID }, ROOM, {
+      onJoinError: () => {
+        if (MP.retrying) return;
+        MP.retrying = true; MP.connected = false; MP.send = null;
+        status('Reconnecting…');
+        try { room.leave(); } catch(e){}
+        for (const id of [...MP.others.keys()]) dropOther(id);
+        setTimeout(() => joinLobby(lib), 1200 + Math.random()*1800);
+      }
     });
+    // trystero 0.25.4 on jsdelivr re-exports @trystero-p2p/nostr, whose API differs from
+    // the docs: makeAction returns {send, onMessage} with onMessage an ASSIGNABLE property
+    // (set it, don't call it); handlers get (data, {peerId}) — the 2nd arg is an object,
+    // not the id itself; room.onPeerJoin/onPeerLeave are assignable properties too.
+    // hook() + pid() absorb every shape so a CDN change can't break the lobby again.
+    const pid = p => (typeof p === 'string' ? p : (p && p.peerId)) || null;
+    const hook = (owner, key, fn) => { if (typeof owner[key] === 'function') owner[key](fn); else owner[key] = fn; };
+    const act = room.makeAction('state');
+    MP.send = Array.isArray(act) ? act[0] : act.send;
+    const onFrame = (d, meta) => { const id = pid(meta); if (d && d.t === 's' && id) applyState(id, d); };
+    if (Array.isArray(act)) act[1](onFrame); else hook(act, 'onMessage', onFrame);
+    MP.room = room; MP.connected = true;
+    hook(room, 'onPeerJoin', () => renderList());
+    hook(room, 'onPeerLeave', p => { const id = pid(p); if (id) dropOther(id); });
+    renderList();
   }
-  const newCode = () => Array.from({length:6}, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random()*31)]).join('');
-  function shareUI(code){
-    MP.code = code; $f('fpRoom').textContent = code;
-    const u = new URL(location.href); u.searchParams.set('room', code); $f('fpLink').value = u.toString();
-    $f('fpShare').hidden = false; $f('fpLobby').style.display = 'none';
-  }
-
-  async function host(){
-    try { await loadLib(); } catch(e){ status('Could not load the multiplayer library. Check the connection.', true); return; }
-    const code = newCode(); status('Opening a room…');
-    MP.peer = new Peer(PREFIX + code);
-    MP.peer.on('open', () => {
-      MP.host = true; MP.myColor = COLORS[0]; shareUI(code);
-      status('Room open. Send the link to a friend.'); renderList();
-    });
-    MP.peer.on('connection', c => {
-      c.on('open', () => {
-        MP.conns.set(c.peer, c);
-        c.send({ t:'welcome', seed:(typeof W !== 'undefined' && W.seedStr) || ui.seed.value, color:COLORS[(MP.conns.size) % COLORS.length] });
-      });
-      c.on('data', d => {
-        if (!d || d.t !== 's') return;
-        d.id = c.peer; applyState(c.peer, d);
-        for (const [pid, o] of MP.conns) if (pid !== c.peer && o.open) o.send(d);      // pass it on to everyone else
-      });
-      c.on('close', () => { MP.conns.delete(c.peer); dropOther(c.peer); for (const o of MP.conns.values()) if (o.open) o.send({ t:'bye', id:c.peer }); });
-    });
-    MP.peer.on('error', e => { if (e.type === 'unavailable-id'){ MP.peer.destroy(); MP.peer = null; host(); } else status('Connection problem: ' + e.type, true); });
-  }
-
-  async function join(code){
-    code = String(code || '').trim().toUpperCase(); if (!code) return;
-    try { await loadLib(); } catch(e){ status('Could not load the multiplayer library. Check the connection.', true); return; }
-    status('Joining ' + code + '…');
-    MP.peer = new Peer();
-    MP.peer.on('open', () => {
-      MP.conn = MP.peer.connect(PREFIX + code, { reliable:true });
-      MP.conn.on('open', () => { shareUI(code); status('Connected to ' + code + '.'); renderList(); });
-      MP.conn.on('data', d => {
-        if (!d) return;
-        if (d.t === 'welcome'){
-          MP.myColor = d.color || COLORS[1];
-          const mine = (typeof W !== 'undefined' && W.seedStr) || ui.seed.value;
-          if (d.seed && d.seed !== mine) status(`Connected. Heads up: your world ("${mine}") differs from the host's ("${d.seed}"), so the ground won't match.`, true);
-          renderList();
-        } else if (d.t === 's') applyState(d.id, d);
-        else if (d.t === 'bye') dropOther(d.id);
-      });
-      MP.conn.on('close', () => { status('The host closed the room.', true); for (const id of [...MP.others.keys()]) dropOther(id); });
-    });
-    MP.peer.on('error', e => status(e.type === 'peer-unavailable' ? 'No room with that code.' : 'Connection problem: ' + e.type, true));
-  }
-
-  $f('fpHost').onclick = () => { if (!MP.peer) host(); };
-  $f('fpJoin').onclick = () => { if (!MP.peer) join($f('fpCode').value); };
-  const room = new URLSearchParams(location.search).get('room');
-  if (room){ $f('fpCode').value = room; panel.hidden = false; join(room); }
-  window.addEventListener('beforeunload', () => { try { MP.peer && MP.peer.destroy(); } catch(e){} });
+  (async () => {
+    try {
+      const lib = await import(TRYSTERO);
+      MP.myColor = colorFor(lib.selfId);
+      joinLobby(lib);
+    } catch(e){
+      window.__mpErr = String(e && e.stack || e);
+      status('Multiplayer could not connect (offline?). The game still plays solo.', true);
+      btn.textContent = 'Friends';
+    }
+  })();
+  window.addEventListener('beforeunload', () => { try { MP.room && MP.room.leave(); } catch(e){} });
 })();
 
 })();

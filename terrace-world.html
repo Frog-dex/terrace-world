@@ -395,6 +395,165 @@ input[type=text]{font:inherit;font-size:14px;width:110px;border:2px solid var(--
 <div class="fade" id="fade"></div>
 <div class="error" id="err"><p>This sketch needs WebGL, and it couldn't start here. Try another browser, or turn on hardware acceleration.</p></div>
 
+<script id="spirits-reputation">/* SPIRITS-REP-BEGIN (generated — edit src/spirits/reputation.js, run tools/sync_spirits_module.py) */
+/* SpiritsRep — B1 scoped reputation (Lane B, Spirits agent).
+   Spec: SPEC.md "Reputation system". Extends the game's per-element W.rep — never replaces it.
+   Scopes: spirit (one spirit's memory) · species (a kind as a whole) · tile · region.
+   Effective rep = weighted blend (spirit .40, species .20, tile .25, region .15), missing
+   scopes drop out and weights renormalize. Species falls back to the element rep (W.rep)
+   so the blend works with today's game state from day one.
+   Canonical numbers live in data/reputation.json; tools/sync_spirits_module.py inlines
+   this file + that json into terrace-world.html between the SPIRITS-REP markers. */
+const SpiritsRep = (() => {
+  const CFG = /*SPIRITS-REP-CFG*/{"_source":"SPEC.md 'Reputation system' \u2014 starting values, tune in playtest (B1, 2026-09-25)","blend":{"spirit":0.4,"species":0.2,"tile":0.25,"region":0.15},"bands":[{"name":"Honoured","min":60,"max":100},{"name":"Welcome","min":20,"max":59},{"name":"Neutral","min":-19,"max":19},{"name":"Unwelcome","min":-59,"max":-20},{"name":"Cursed","min":-100,"max":-60}],"decayPerDay":0.02,"spiritScopeDecayFactor":0.5,"exorcismFloor":-100,"elementFallbackForSpecies":true,"actions":{"chop_tree":{"tile":-1},"replant_refund":{"tile":1},"clear_cut":{"tile":-8},"pollute":{"tile":-10,"speciesAll":-3},"hunt_thanked":{"tile":0,"species":1},"hunt_unthanked":{"tile":-2,"species":-4},"overhunt":{"tile":-6,"species":-8},"restore_land":{"tile":3},"restore_dead_land":{"tile":6},"help_spirit":{"species":5,"spirit":15},"trial_pass":{"spirit":15},"trial_fail":{"spirit":-10},"ask_join":{"spirit":10},"merge":{"species":5},"fight_yield":{"spirit":5},"force_exorcism":{"tile":-5,"species":-10,"spiritFloor":true},"defeat_lizards":{"tile":4,"region":1}}}/*END-SPIRITS-REP-CFG*/ || {
+    blend: { spirit: 0.40, species: 0.20, tile: 0.25, region: 0.15 },
+    bands: [
+      { name: 'Honoured',  min: 60,   max: 100 },
+      { name: 'Welcome',   min: 20,   max: 59 },
+      { name: 'Neutral',   min: -19,  max: 19 },
+      { name: 'Unwelcome', min: -59,  max: -20 },
+      { name: 'Cursed',    min: -100, max: -60 }
+    ],
+    decayPerDay: 0.02, spiritScopeDecayFactor: 0.5, exorcismFloor: -100,
+    elementFallbackForSpecies: true, actions: {}
+  };
+  const S = { spirit: {}, species: {}, tile: {}, region: {}, lastDecayDay: -1 };
+  const subs = {};
+  // The game's W / EL_ORDER live inside its own closure, not on window.
+  // The game binds them once at boot: SpiritsRep._bindWorld(() => W, () => EL_ORDER).
+  let BOUND = null;
+  function _bindWorld(getW, getElOrder){ BOUND = { getW, getElOrder }; }
+  function isBound(){ return !!BOUND; }
+  function worldRep(){
+    if (BOUND) { const w = BOUND.getW(); return (w && w.rep) || null; }
+    return (typeof W !== 'undefined' && W.rep) || null;
+  }
+  function elOrder(){
+    if (BOUND) return BOUND.getElOrder() || [];
+    return (typeof EL_ORDER !== 'undefined') ? EL_ORDER : [];
+  }
+  const clampV = v => Math.max(-100, Math.min(100, v));
+
+  function band(v){
+    for (const b of CFG.bands){ if (v >= b.min && v <= b.max) return b.name; }
+    return 'Neutral';
+  }
+  function get(scope, key){
+    const m = S[scope]; const v = m && m[key];
+    return (v == null) ? null : v;
+  }
+  function set(scope, key, v){
+    if (!S[scope]) S[scope] = {};
+    S[scope][key] = clampV(v);
+  }
+  function nudge(scope, key, d, ctx){
+    if (key == null || !d && d !== 0) return;
+    const beforeBand = ctx ? band(effective(ctx)) : null;
+    set(scope, key, (get(scope, key) || 0) + d);
+    if (ctx) maybeEmitBand(beforeBand, ctx);
+  }
+  // ctx: { spiritId, species, element, tileKey, regionKey }
+  function effective(ctx){
+    ctx = ctx || {};
+    const parts = [];
+    const sv = ctx.spiritId != null ? get('spirit', ctx.spiritId) : null;
+    if (sv != null) parts.push([CFG.blend.spirit, sv]);
+    let spv = ctx.species != null ? get('species', ctx.species) : null;
+    if (spv == null && CFG.elementFallbackForSpecies && ctx.element){
+      const wr = worldRep();
+      if (wr && wr[ctx.element] != null) spv = wr[ctx.element];   // element rep stands in for species
+    }
+    if (spv != null) parts.push([CFG.blend.species, spv]);
+    const tv = ctx.tileKey != null ? get('tile', ctx.tileKey) : null;
+    if (tv != null) parts.push([CFG.blend.tile, tv]);
+    const rv = ctx.regionKey != null ? get('region', ctx.regionKey) : null;
+    if (rv != null) parts.push([CFG.blend.region, rv]);
+    if (!parts.length) return 0;
+    const wsum = parts.reduce((a, p) => a + p[0], 0);
+    return parts.reduce((a, p) => a + p[0] * p[1], 0) / wsum;   // renormalized blend
+  }
+  function bandOf(ctx){ return band(effective(ctx)); }
+
+  // Apply a named action from the spec's delta table.
+  function act(name, ctx){
+    const a = CFG.actions[name]; if (!a) return null;
+    ctx = ctx || {};
+    const beforeBand = band(effective(ctx));
+    if (a.tile != null && ctx.tileKey != null) nudge('tile', ctx.tileKey, a.tile);
+    if (a.species != null && ctx.species != null) nudge('species', ctx.species, a.species);
+    if (a.spirit != null && ctx.spiritId != null) nudge('spirit', ctx.spiritId, a.spirit);
+    if (a.region != null && ctx.regionKey != null) nudge('region', ctx.regionKey, a.region);
+    if (a.spiritFloor && ctx.spiritId != null) set('spirit', ctx.spiritId, CFG.exorcismFloor);
+    if (a.speciesAll != null){                 // e.g. pollute spreads to every species known here
+      for (const k of Object.keys(S.species)) nudge('species', k, a.speciesAll);
+    }
+    maybeEmitBand(beforeBand, ctx);
+    return effective(ctx);
+  }
+
+  // Daily decay: every value drifts decayPerDay toward zero per in-game day.
+  // Spirit-scope memory decays at half rate (they remember you longer). Spec: "Decay".
+  function tick(days){
+    if (typeof days !== 'number') return;
+    if (S.lastDecayDay < 0){ S.lastDecayDay = days; return; }
+    let elapsed = Math.min(30, Math.max(0, days - S.lastDecayDay));
+    if (elapsed < 1) return;
+    S.lastDecayDay = days;
+    while (elapsed-- >= 1){
+      for (const scope of ['spirit', 'species', 'tile', 'region']){
+        const rate = CFG.decayPerDay * (scope === 'spirit' ? CFG.spiritScopeDecayFactor : 1);
+        const m = S[scope];
+        for (const k of Object.keys(m)){
+          m[k] = m[k] * (1 - rate);
+          if (Math.abs(m[k]) < 0.05) delete m[k];   // fully faded — forget the entry
+        }
+      }
+    }
+  }
+
+  // For the HUD (Blu decided Sept 25: reputation is visible on the wheel).
+  // elementStanding feeds the six hexagon points; overall feeds the aurora ring.
+  function elementStanding(el){
+    const wr = worldRep(); return (wr && wr[el]) || 0;
+  }
+  function overall(){
+    let els = [], sc = [];
+    const wr = worldRep();
+    if (wr) els = elOrder().map(e => wr[e] || 0);
+    for (const scope of ['spirit', 'species', 'tile', 'region']){
+      for (const k of Object.keys(S[scope])) sc.push(S[scope][k]);
+    }
+    const mean = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+    const em = mean(els), sm = mean(sc);
+    if (em == null && sm == null) return 0;
+    if (em == null) return sm;
+    if (sm == null) return em;
+    return em * 0.5 + sm * 0.5;                 // starting formula — TUNE in playtest
+  }
+
+  // Minimal event bus — the Spirits facade (B2+) will forward these.
+  function on(ev, fn){ (subs[ev] = subs[ev] || []).push(fn); }
+  function emit(ev, data){ for (const f of (subs[ev] || [])){ try { f(data); } catch(e){} } }
+  function maybeEmitBand(beforeBand, ctx){
+    const nowBand = band(effective(ctx));
+    if (beforeBand && nowBand !== beforeBand){
+      emit('reputationBand', { ctx, from: beforeBand, to: nowBand, value: effective(ctx) });
+    }
+  }
+
+  function serialize(){ return { v: 1, spirit: S.spirit, species: S.species, tile: S.tile, region: S.region, lastDecayDay: S.lastDecayDay }; }
+  function restore(d){
+    if (!d || d.v !== 1) return;
+    S.spirit = d.spirit || {}; S.species = d.species || {}; S.tile = d.tile || {}; S.region = d.region || {};
+    S.lastDecayDay = (d.lastDecayDay == null) ? -1 : d.lastDecayDay;
+  }
+  function debug(){ return { cfg: CFG, state: S }; }
+
+  return { band, bandOf, effective, act, nudge, get, tick, on, _bindWorld, isBound,
+           elementStanding, overall, serialize, restore, debug, CFG };
+})();
+
+/* SPIRITS-REP-END */</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 (() => {
@@ -1922,7 +2081,7 @@ function saveGame(){
       plots: W.plots.map(p => ({ i:p.i, j:p.j, stage:p.stage, at:p.at })), bushes: W.bushes.map(b => ({ x:b.x, z:b.z, ripe:b.ripe, regrow:b.regrow })),
       piles: W.piles.map(p => ({ x:p.x, z:p.z, items:p.items })), rocks: rk,
       pack: W.pack, chest: W.chest, wear: W.wear, strap: W.strapItem || null, carry: CARRY, str: { lv:STR.lv, xp:STR.xp }, stoneV2: true, relicV3: true,
-      dirt: W.dirt, sand: W.sand, found: [...W.found], foundCount: W.foundCount, rep: W.rep || {}, party: W.party || [],
+      dirt: W.dirt, sand: W.sand, found: [...W.found], foundCount: W.foundCount, rep: W.rep || {}, party: W.party || [], repScopes: (typeof SpiritsRep !== "undefined" ? SpiritsRep.serialize() : null),
       cards: cardsOwned, hp: player.hp, hero: { x: hero.x, z: hero.z }, boat: W.boat ? { x: W.boat.x, z: W.boat.z, heading: W.boat.heading } : null,
       clock: { tod: clock.tod, days: clock.days } };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -1965,7 +2124,7 @@ function loadGame(){
       if (d.cards){ const c = {}; for (const [k, v] of Object.entries(d.cards)) c[RM[k] || CM[k] || k] = v; d.cards = c; }
     }
     W.pack = d.pack; W.chest = d.chest; W.wear = d.wear; W.strapItem = d.strap; CARRY = d.carry || 40; if (d.str){ STR.lv = d.str.lv; STR.xp = d.str.xp; } if (!d.stoneV2) repackStones();
-    W.dirt = d.dirt || 0; W.sand = d.sand || 0; W.found = new Set(d.found); W.foundCount = d.foundCount || 0; W.rep = d.rep; W.party = d.party;
+    W.dirt = d.dirt || 0; W.sand = d.sand || 0; W.found = new Set(d.found); W.foundCount = d.foundCount || 0; W.rep = d.rep; W.party = d.party; if (d.repScopes && typeof SpiritsRep !== "undefined") SpiritsRep.restore(d.repScopes);
     Object.assign(cardsOwned, d.cards); player.hp = d.hp;
     hero.x = d.hero.x; hero.z = d.hero.z; hero.y = stepAt(hero.x, hero.z); hero.boating = false; cam.tx = hero.x; cam.tz = hero.z; cam.ty = hero.y;
     if (d.boat && W.boat){ W.boat.x = d.boat.x; W.boat.z = d.boat.z; W.boat.heading = d.boat.heading; }
@@ -3405,6 +3564,7 @@ function cutaway(dt){
 }
 function insideFrame(dt){
   if (typeof stepRep === "function") stepRep(dt);                             // quiet time at home (in bed, by the window) pleases the spirits too
+  if (typeof SpiritsRep !== "undefined"){ if (!SpiritsRep.isBound()) SpiritsRep._bindWorld(() => W, () => EL_ORDER); SpiritsRep.tick(clock.days); }
   const f = frogIn; inside.t += dt;
   // walking with WASD, relative to where the camera looks
   const fwd = _v.set(0,0,-1).applyQuaternion(inCam.quaternion); fwd.y = 0; fwd.normalize();
@@ -3793,6 +3953,7 @@ function spawnSpirits(){
 }
 function stepSpirits(dt){
   stepRep(dt);
+  if (typeof SpiritsRep !== "undefined"){ if (!SpiritsRep.isBound()) SpiritsRep._bindWorld(() => W, () => EL_ORDER); SpiritsRep.tick(clock.days); }
   for (let q = W.spiritQueue.length-1; q >= 0; q--){ W.spiritQueue[q].t -= dt; if (W.spiritQueue[q].t <= 0){ spawnSpirit(W.spiritQueue[q].kind); W.spiritQueue.splice(q,1); } }
   for (const s of [...W.spirits]){
     s.t += dt; s.age += dt; s.calm = Math.max(0, s.calm - dt);

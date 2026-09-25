@@ -105,34 +105,49 @@
   }
   function flash() { const g=$('game'); g.classList.remove('flash'); void g.offsetWidth; g.classList.add('flash'); }
 
-  const room = joinRoom({appId: APP_ID}, ROOM, {
-    onJoinError: d => { setStatus('Could not join the room. Reload to try again.', 'bad'); log('join error ' + JSON.stringify(d)); }
-  });
-  const hello = room.makeAction('hello');
-  const press = room.makeAction('press');
+  let room, hello, press, retrying = false;
 
-  room.onPeerJoin = peerId => {
-    if (!names[peerId]) names[peerId] = 'Joining…';
-    hello.send({name: myName(), count}, {target: peerId});
-    render();
-  };
-  room.onPeerLeave = peerId => {
-    log((names[peerId] || 'A player') + ' left');
-    delete names[peerId];
-    render();
-  };
-  hello.onMessage = (data, {peerId}) => {
-    if (!data || typeof data !== 'object') return;
-    const isNew = !names[peerId] || names[peerId] === 'Joining…';
-    names[peerId] = String(data.name || 'Player').slice(0,16);
-    if (Number.isFinite(data.count) && data.count > count) count = data.count;
-    if (isNew) log(names[peerId] + ' joined');
-    render();
-  };
-  press.onMessage = (data, {peerId}) => {
-    count++; last = names[peerId] || 'Someone';
-    render(); flash();
-  };
+  // A failed handshake (usually two people opening the link at the same instant) leaves and rejoins.
+  function connect() {
+    retrying = false;
+    room = joinRoom({appId: APP_ID}, ROOM, {
+      onJoinError: d => {
+        log('connection hiccup (' + (d && d.error || 'unknown') + '), reconnecting');
+        if (retrying) return;
+        retrying = true;
+        setStatus('Reconnecting…');
+        room.leave();
+        for (const id of Object.keys(names)) delete names[id];
+        setTimeout(connect, 1000 + Math.random() * 2000);
+      }
+    });
+    hello = room.makeAction('hello');
+    press = room.makeAction('press');
+
+    room.onPeerJoin = peerId => {
+      if (!names[peerId]) names[peerId] = 'Joining…';
+      hello.send({name: myName(), count}, {target: peerId});
+      render();
+    };
+    room.onPeerLeave = peerId => {
+      log((names[peerId] || 'A player') + ' left');
+      delete names[peerId];
+      render();
+    };
+    hello.onMessage = (data, {peerId}) => {
+      if (!data || typeof data !== 'object') return;
+      const isNew = !names[peerId] || names[peerId] === 'Joining…';
+      names[peerId] = String(data.name || 'Player').slice(0,16);
+      if (Number.isFinite(data.count) && data.count > count) count = data.count;
+      if (isNew) log(names[peerId] + ' joined');
+      render();
+    };
+    press.onMessage = (data, {peerId}) => {
+      count++; last = names[peerId] || 'Someone';
+      render(); flash();
+    };
+  }
+  connect();
 
   $('press').onclick = () => {
     count++; last = myName();

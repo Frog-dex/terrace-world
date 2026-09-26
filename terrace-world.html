@@ -240,6 +240,7 @@ input[type=text]{font:inherit;font-size:14px;width:110px;border:2px solid var(--
 body.twhud #hpHud, body.twhud #readout, body.twhud #hotbar{display:none!important}
 body.twhud:not(.twSettings) #panel{display:none!important}
 body.twhud #panel{z-index:30}
+body.twhud #perf{top:calc(min(1400px,100vw)*112/1400 + env(safe-area-inset-top,0px))!important}
 </style>
 </head>
 <body>
@@ -6128,7 +6129,10 @@ function buildBox(id){
   const soft = (pts, r) => { let s = ''; pts.forEach((v, i) => { const a = pts[(i+7)%8], n = pts[(i+1)%8], la = Math.hypot(a[0]-v[0], a[1]-v[1]), ln = Math.hypot(n[0]-v[0], n[1]-v[1]);
     const p1 = [v[0] + (a[0]-v[0])/la*r, v[1] + (a[1]-v[1])/la*r], p2 = [v[0] + (n[0]-v[0])/ln*r, v[1] + (n[1]-v[1])/ln*r];
     s += (i ? 'L' : 'M') + p1.join(' ') + 'Q' + v.join(' ') + ' ' + p2.join(' '); }); return s + 'Z'; };
-  root.querySelector('.rim').innerHTML = `<svg width="${W + 2*rim + 8}" height="${H + 2*rim + 8}" style="left:${24-rim}px;top:${24-rim}px"><path transform="translate(${rim+4} ${rim+4})" d="${soft(Q, 14)} ${d(P)}" fill="#f3d37a" fill-rule="evenodd" stroke="#2b2466" stroke-width="5" stroke-linejoin="round"/></svg>`;
+  const defs = `<defs><linearGradient id="mt-${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbe3a0"/><stop offset=".06" stop-color="#fbe3a0"/><stop offset=".06" stop-color="#f3d37a"/><stop offset=".94" stop-color="#f3d37a"/><stop offset=".94" stop-color="#d9ae50"/><stop offset="1" stop-color="#d9ae50"/></linearGradient>`
+    + `<pattern id="br-${id}" width="7" height="3" patternUnits="userSpaceOnUse"><rect width="7" height="1" fill="rgba(120,80,10,.07)"/></pattern>`
+    + `<linearGradient id="gl-${id}" x1="0" y1="0" x2="1" y2=".55"><stop offset=".3" stop-color="#fff" stop-opacity="0"/><stop offset=".3" stop-color="#fffbe8" stop-opacity=".45"/><stop offset=".34" stop-color="#fffbe8" stop-opacity=".45"/><stop offset=".34" stop-color="#fff" stop-opacity="0"/><stop offset=".37" stop-color="#fff" stop-opacity="0"/><stop offset=".37" stop-color="#fffbe8" stop-opacity=".35"/><stop offset=".385" stop-color="#fffbe8" stop-opacity=".35"/><stop offset=".385" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>`;
+  root.querySelector('.rim').innerHTML = `<svg width="${W + 2*rim + 8}" height="${H + 2*rim + 8}" style="left:${24-rim}px;top:${24-rim}px">${defs}<path transform="translate(${rim+4} ${rim+4})" d="${soft(Q, 14)} ${d(P)}" fill="url(#mt-${id})" fill-rule="evenodd" stroke="#2b2466" stroke-width="5" stroke-linejoin="round"/><path transform="translate(${rim+4} ${rim+4})" d="${soft(Q, 14)} ${d(P)}" fill="url(#br-${id})" fill-rule="evenodd"/><path transform="translate(${rim+4} ${rim+4})" d="${soft(Q, 14)} ${d(P)}" fill="url(#gl-${id})" fill-rule="evenodd"/></svg>`;
 }
 addEventListener('resize', () => { if (!$('picker').hidden) buildBox('picker'); });
 const HINGE = {"x1": 436, "x2": 964, "barTop": 14};   // the box's bottom edge runs between two slot lines on the bar's top edge
@@ -6371,14 +6375,23 @@ try {
     fragmentShader: 'uniform vec3 col; varying vec3 vN; void main(){ float l = dot(normalize(vN), normalize(vec3(-0.35,0.75,0.55))); float k = l > 0.45 ? 1.0 : (l > -0.1 ? 0.88 : 0.74); gl_FragColor = vec4(col*k, 1.0); }'
   }, extra || {}));
   const flat = hex => new THREE.MeshBasicMaterial({ color: hex });
+  // Spirit Striker metals. Fronts are brushed yellow brass: three hard bands (lit top, face, shadowed foot), fine brushed
+  // lines and one slanted glint. Sides and trim are red enamelled metal: four cel tones plus a hard specular stripe.
+  const YEL = 0xf3d37a, RED = 0xc0392b;
+  const metalFront = (hex, y0, y1) => new THREE.ShaderMaterial({ uniforms: { col: { value: new THREE.Color(hex) }, y0: { value: y0 }, y1: { value: y1 } },
+    vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+    fragmentShader: 'uniform vec3 col; uniform float y0; uniform float y1; varying vec3 vP; float h(float n){ return fract(sin(n*12.9898)*43758.5453); } void main(){ float v = clamp((y1 - vP.y)/max(1.0, y1 - y0), 0.0, 1.0); float k = v < 0.22 ? 1.1 : (v < 0.74 ? 1.0 : 0.86); float br = (h(floor(vP.y*1.4)) - 0.5)*0.05 + (h(floor(vP.y*0.33) + 7.0) - 0.5)*0.05; float g = fract((vP.x - vP.y*1.3)/520.0); float gl = (g < 0.05 ? 0.42 : 0.0) + ((g > 0.075 && g < 0.09) ? 0.3 : 0.0); vec3 c = mix(col*(k + br), vec3(1.0, 0.98, 0.9), gl*(v < 0.74 ? 1.0 : 0.4)); gl_FragColor = vec4(min(c, vec3(1.0)), 1.0); }' });
+  const metalSide = hex => new THREE.ShaderMaterial({ uniforms: { col: { value: new THREE.Color(hex) } },
+    vertexShader: 'varying vec3 vN; varying vec3 vP; void main(){ vP = position; vN = normalize(normalMatrix*normal); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+    fragmentShader: 'uniform vec3 col; varying vec3 vN; varying vec3 vP; void main(){ vec3 n = normalize(vN), L = normalize(vec3(-0.35,0.75,0.55)); float l = dot(n, L); float k = l > 0.6 ? 1.2 : (l > 0.2 ? 1.0 : (l > -0.25 ? 0.78 : 0.6)); float sp = step(0.93, dot(n, normalize(L + vec3(0.0,0.0,1.0)))); float br = (fract(sin(floor(vP.z*1.1)*12.9898)*43758.5453) - 0.5)*0.06; vec3 c = mix(col*(k + br), vec3(1.0, 0.95, 0.85), sp*0.55); gl_FragColor = vec4(min(c, vec3(1.0)), 1.0); }' });
   const hull = new THREE.MeshBasicMaterial({ color: INKC, side: THREE.BackSide });
   const topG = new THREE.Group(), botG = new THREE.Group(); sc.add(topG, botG);
   const INK_W = 2.5;
 
   // a slab: cream front, cel-shaded sides, ink line round the front and ink silhouette behind
-  function slab(P, rad, depth, group, frontHex = 0xf3d37a, sideHex = 0xe9c25a){
-    const ex = { depth, bevelEnabled: false, curveSegments: 14 };
-    const m = new THREE.Mesh(new THREE.ExtrudeGeometry(threePath(P, rad, new THREE.Shape()), ex), [flat(frontHex), cel(sideHex)]);
+  function slab(P, rad, depth, group, frontHex = YEL, sideHex = RED){
+    const ex = { depth, bevelEnabled: false, curveSegments: 14 }, ys = P.map(p => -p[1]);
+    const m = new THREE.Mesh(new THREE.ExtrudeGeometry(threePath(P, rad, new THREE.Shape()), ex), [metalFront(frontHex, Math.min(...ys), Math.max(...ys)), metalSide(sideHex)]);
     m.position.z = -depth; group.add(m);
     const h = new THREE.Mesh(new THREE.ExtrudeGeometry(threePath(offsetPoly(P, INK_W), rad+INK_W, new THREE.Shape()), { depth: depth+1, bevelEnabled:false, curveSegments: 14 }), hull);
     h.position.z = -depth-1; group.add(h);
@@ -6422,28 +6435,31 @@ try {
   }
   function gear(cx, cy, z, teeth, Ro, Ri, depth, group, hex){
     const g = new THREE.Group(); g.position.set(cx, -cy, z); group.add(g);
-    const sh = gearShape(teeth, Ro, Ri, Ro*.22, teeth > 9 ? 5 : 0, Ro*.14, Ro*.56);
-    const m = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: true, bevelThickness: .8, bevelSize: .6, bevelSegments: 1, curveSegments: 12 }), cel(hex)); m.position.z = -depth; g.add(m);
-    const hs = gearShape(teeth, Ro+INK_W*.9, Ri+INK_W*.9, 0.01, 0, 0, 0);
+    const sh = gearShape(teeth, Ro, Ri, Ro*.22, 0, 0, 0);
+    const m = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false, curveSegments: 16 }), [metalFront(YEL, -Ro, Ro), metalSide(RED)]); m.position.z = -depth; g.add(m);
+    const ring = new THREE.Shape(); ring.absarc(0, 0, Ri - 5, 0, Math.PI*2, false); const rh = new THREE.Path(); rh.absarc(0, 0, Ri - 7.5, 0, Math.PI*2, true); ring.holes.push(rh);
+    const ri = new THREE.Mesh(new THREE.ShapeGeometry(ring, 32), flat(INKC)); ri.position.z = .4; g.add(ri);
+    const hs = gearShape(teeth, Ro+INK_W*1.2, Ri+INK_W*1.2, 0.01, 0, 0, 0);
     const h = new THREE.Mesh(new THREE.ExtrudeGeometry(hs, { depth: depth+2, bevelEnabled:false, curveSegments: 12 }), hull); h.position.z = -depth-1.5; g.add(h);
-    const axle = new THREE.Mesh(new THREE.CylinderGeometry(Ro*.16, Ro*.16, depth+4, 20), cel(0x2b2466)); axle.rotation.x = Math.PI/2; axle.position.z = -depth/2+1; group.add(axle); axle.position.x = cx; axle.position.y = -cy; axle.position.z = z - depth/2 + 1.5;
+    const axle = new THREE.Mesh(new THREE.CylinderGeometry(Ro*.2, Ro*.2, depth+4, 20), metalSide(RED)); axle.rotation.x = Math.PI/2; axle.position.z = -depth/2+1; group.add(axle); axle.position.x = cx; axle.position.y = -cy; axle.position.z = z - depth/2 + 1.5;
     return g;
   }
 
   // ---- top row ----
   const D_TOP = 36, D_BOT = 42;
   slab(G3.plateL, 15, D_TOP, topG); slab(G3.plateR, 15, D_TOP, topG);
-  // everything round up top lies on the compass's plane: a flat disc seen at the compass's angle (26° up), turned to face the eye
-  const TILT = hudTILT;
+  // the round pieces up top (portrait coin, compass, gear) face you exactly like the plates: fronts toward the eye, depth running
+  // straight back into the screen toward the one vanishing point
   function onPlane(cx, cy, z, parent){ const g = new THREE.Group(); g.position.set(cx, -cy, z); parent.add(g); const inner = new THREE.Group(); g.add(inner); return { g, inner }; }
   // portrait: a coin with the character's art on its face, like the compass face
   const pc = onPlane(G3.portrait[0], G3.portrait[1], 4, topG);
   const coinR = 34, coinH = 20;
   const faceTex = new THREE.Texture(); faceTex.wrapS = faceTex.wrapT = THREE.ClampToEdgeWrapping; faceTex.center.set(.5, .5); faceTex.rotation = Math.PI/2;
-  const coin = new THREE.Mesh(new THREE.CylinderGeometry(coinR, coinR, coinH, 64), [cel(0xe9c25a), new THREE.MeshBasicMaterial({ map: faceTex }), cel(0xb8a67e)]);
+  const coin = new THREE.Mesh(new THREE.CylinderGeometry(coinR, coinR, coinH, 64), [metalSide(RED), new THREE.MeshBasicMaterial({ map: faceTex }), metalSide(RED)]);
   const coinInk = new THREE.Mesh(new THREE.CylinderGeometry(coinR + 3, coinR + 3, coinH + 2, 64), hull);
   const rim = new THREE.Mesh(new THREE.TorusGeometry(coinR - 1, 2.2, 8, 64), flat(INKC)); rim.rotation.x = Math.PI/2; rim.position.y = coinH/2;
-  const rim2 = new THREE.Mesh(new THREE.TorusGeometry(coinR - 7, 1.2, 8, 64), cel(0xe0a93c)); rim2.rotation.x = Math.PI/2; rim2.position.y = coinH/2 + .3;
+  const rim2 = new THREE.Mesh(new THREE.TorusGeometry(coinR - 4.5, 3.4, 12, 64), metalSide(YEL)); rim2.rotation.x = Math.PI/2; rim2.position.y = coinH/2 + .3;
+  pc.inner.rotation.x = Math.PI/2;
   pc.inner.add(coinInk, coin, rim, rim2);
   function hudPortrait(src){ const im = new Image(); im.onload = () => {   // crop the card art to the head and shoulders
     const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d'); g.fillStyle = '#fffaf0'; g.fillRect(0,0,256,256);
@@ -6455,26 +6471,10 @@ try {
   pe.addEventListener('mouseenter', () => coinS.hover = true); pe.addEventListener('mouseleave', () => coinS.hover = false);
   pe.addEventListener('focus', () => coinS.hover = true); pe.addEventListener('blur', () => coinS.hover = false);
 
-  // the menu gear, where the sun was, lying on the same plane, chained to a sprocket, with a drive gear that cranks the menu
+  // the menu gear, where the sun was: one plain gear that turns all the time and spins up when you point at it
   const ga = onPlane(G3.gear[0], G3.gear[1], 10, topG);
   const rel = p => [p[0] - G3.gear[0], -(p[1] - G3.gear[1])];
-  const gA = gear(0, 0, 0, 12, 33, 27.5, 24, ga.inner, 0xe0a93c);
-  const [bx, by] = rel(G3.sprocket), [cx2, cy2] = rel(G3.gearC);
-  const gB = gear(bx, -by, 0, 8, 11.5, 8.6, 16, ga.inner, 0xe0a93c);
-  const gC = gear(cx2, -cy2, -2, 9, 13, 10, 18, ga.inner, 0xc98f2e);
-  const A = { x: 0, y: 0, r: 30.5 }, B = { x: bx, y: by, r: 10 };
-  const dd = Math.hypot(B.x-A.x, B.y-A.y), ax = Math.atan2(B.y-A.y, B.x-A.x), th = Math.acos((A.r-B.r)/dd), straight = Math.sqrt(dd*dd - (A.r-B.r)**2);
-  const legs = [straight, B.r*2*th, straight, A.r*(Math.PI*2 - 2*th)], CL = legs.reduce((a,b)=>a+b);
-  const at = (c, a) => [c.x + Math.cos(ax+a)*c.r, c.y + Math.sin(ax+a)*c.r];
-  function chainAt(s){ s = ((s % CL) + CL) % CL;
-    if (s < legs[0]){ const p = at(A, th), q = at(B, th), t = s/legs[0]; return [p[0]+(q[0]-p[0])*t, p[1]+(q[1]-p[1])*t, Math.atan2(q[1]-p[1], q[0]-p[0])]; } s -= legs[0];
-    if (s < legs[1]){ const a = th - s/B.r, p = at(B, a); return [p[0], p[1], ax + a - Math.PI/2]; } s -= legs[1];
-    if (s < legs[2]){ const p = at(B, -th), q = at(A, -th), t = s/legs[2]; return [p[0]+(q[0]-p[0])*t, p[1]+(q[1]-p[1])*t, Math.atan2(q[1]-p[1], q[0]-p[0])]; } s -= legs[2];
-    const a = -th - s/A.r, p = at(A, a); return [p[0], p[1], ax + a - Math.PI/2]; }
-  const LINK = 5.2, NL = Math.floor(CL/LINK), linkGap = CL/NL;
-  const links = new THREE.InstancedMesh(new THREE.BoxGeometry(linkGap*.6, 2.8, 2.2), cel(0x3b3552), NL); ga.inner.add(links);
-  const linkHull = new THREE.InstancedMesh(new THREE.BoxGeometry(linkGap*.6+1.3, 4.4, 1), hull, NL); ga.inner.add(linkHull);
-  const dummy = new THREE.Object3D();
+  const gA = gear(0, 0, 0, 8, 32, 24, 22, ga.inner);
   const gearS = { tilt: 0 };
 
   // ---- bottom row ----
@@ -6619,7 +6619,7 @@ try {
   // ---- perspective grid (press G): lines running from the screen's edges to the one vanishing point everything uses
   let grid = null;
   function makeGrid(){
-    if (grid){ sc.remove(grid); grid.geometry.dispose(); }
+    if (grid){ sc.remove(grid); grid.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
     const W = innerWidth, H = innerHeight, v = [], Z = -2600;
     for (let k = 0; k <= 12; k++){ const x = W*k/12; v.push(x, 0, 0, x, 0, Z, x, -H, 0, x, -H, Z); }
     for (let k = 0; k <= 8; k++){ const y = -H*k/8; v.push(0, y, 0, 0, y, Z, W, y, 0, W, y, Z); }
@@ -6655,7 +6655,7 @@ try {
     const tip = 5;
     const cone = (r0, r1, mat) => { const c = new THREE.Mesh(new THREE.CylinderGeometry(r1, r0, Lc, 48, 1, true), mat); c.position.y = Lc/2; o.pg.add(c); return c; };
     cone(tip + 3, rb + 3, hull); cone(tip*.55, rb*.62, o.pipeParts.flow); const g = cone(tip, rb, o.pipeParts.glass); g.renderOrder = 1;
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(tip + 1.5, 2.4, 10, 28), cel(0xe0a93c)); ring.rotation.x = Math.PI/2; ring.position.y = 3;
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(tip + 1.5, 2.4, 10, 28), metalSide(YEL)); ring.rotation.x = Math.PI/2; ring.position.y = 3;
     const ringH = new THREE.Mesh(new THREE.TorusGeometry(tip + 1.5, 3.8, 10, 28), hull); ringH.rotation.x = Math.PI/2; ringH.position.y = 3;
     o.pg.add(ringH, ring);
     o.nozzle = [X(A2[0]), -A2[1]];
@@ -6680,7 +6680,7 @@ try {
       tubeLiq[o.kind] = { liq, elbow, x0, len, sgn };
     });
     // brass coupling where the two meet
-    const cp = new THREE.Mesh(new THREE.CylinderGeometry(7, 7, 16, 18), cel(0xe0a93c)); cp.rotation.z = Math.PI/2; cp.position.set(mid, yT, -4);
+    const cp = new THREE.Mesh(new THREE.CylinderGeometry(7, 7, 16, 18), metalSide(RED)); cp.rotation.z = Math.PI/2; cp.position.set(mid, yT, -4);
     const cpH = new THREE.Mesh(new THREE.CylinderGeometry(9.5, 9.5, 18, 18), hull); cpH.rotation.z = Math.PI/2; cpH.position.copy(cp.position); tubeG.add(cpH, cp);
   }
   function tubeFrame(){
@@ -6696,34 +6696,22 @@ try {
     topG.position.set(t.left, -t.top, 0); topG.scale.setScalar(t.width/1400);
     botG.position.set(b.left, -b.top, 0); botG.scale.setScalar(b.width/BW); layBar(); orbs.forEach(o => o.base.x = o.kind === 'h' ? G3.orb[0] : BW - G3.orb[0]);
     HOST.style.setProperty('--persp', Dz.toFixed(1) + 'px');
-    makeGrid(); drawers.forEach(d => d.h = 0); up.h = 0;
-    { const sB = b.width/BW, VPu = new THREE.Vector3((W/2 - b.left)/sB, (-H/2 + b.top)/sB, 0), Du = Dz/sB; orbs.forEach(o => layPipe(o)); layTubes(); }
+    const safe = f => { try { f(); } catch (e) { console.warn('HUD layout step failed:', e); } };
+    safe(makeGrid); drawers.forEach(d => d.h = 0); up.h = 0;
+    orbs.forEach(o => safe(() => layPipe(o))); safe(layTubes);
   }
   place(); addEventListener('resize', place);
   // the compass: moved out of its own little scene into this one, lying on the same plane as the coin and gears
   let compG = null;
   if (typeof comp !== 'undefined' && comp && comp.sc){ const grp = comp.sc.children.find(c => c.type === 'Group');
-    if (grp){ comp.sc.remove(grp); compG = onPlane(700, 48, 0, topG); compG.inner.add(grp); grp.scale.setScalar(44); $('compass').style.visibility = 'hidden'; } }
-  // ---- the carry rod: one thin glass thermometer the top pieces clip onto, so the name plate, portrait, compass, gear and
-  //      date plate are a single tool that hangs on the backpack. It bows through the pieces where they already sit.
-  const rodPts = [[250, 36], [G3.portrait[0], G3.portrait[1] + 2], [540, 52], [700, 58], [860, 52], [G3.gear[0], G3.gear[1] + 2], [1150, 36]]
-    .map(([x, y], i, a) => new THREE.Vector3(x, -y, -22 + (i === 0 || i === a.length - 1 ? -6 : 0)));
-  const rodC = new THREE.CatmullRomCurve3(rodPts, false, 'catmullrom', .5);
-  topG.add(new THREE.Mesh(new THREE.TubeGeometry(rodC, 120, 7.2, 12, false), hull));
-  const rodGlass = new THREE.Mesh(new THREE.TubeGeometry(rodC, 120, 5.4, 14, false), glassMat()); rodGlass.renderOrder = 1; topG.add(rodGlass);
-  // the thermometer's liquid: rises and falls with the day's warmth, from a bulb at the name-plate end
-  const rodLiq = new THREE.ShaderMaterial({ uniforms: { lvl: { value: .5 }, t: { value: 0 } },
-    vertexShader: 'varying vec2 vU; varying vec3 vN; void main(){ vU = uv; vN = normalize(normalMatrix*normal); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
-    fragmentShader: 'uniform float lvl; uniform float t; varying vec2 vU; varying vec3 vN; void main(){ if (vU.x > lvl) discard; float l = dot(normalize(vN), normalize(vec3(-0.35,0.75,0.55))); float k = l > 0.35 ? 1.0 : (l > -0.2 ? 0.8 : 0.62); gl_FragColor = vec4(vec3(0.83,0.24,0.2)*k, 1.0); }' });
-  topG.add(new THREE.Mesh(new THREE.TubeGeometry(rodC, 120, 2.6, 8, false), rodLiq));
-  const bulb = new THREE.Mesh(new THREE.SphereGeometry(8, 20, 14), cel(0xd33d33)); bulb.position.copy(rodPts[0]); topG.add(bulb);
-  const bulbH = new THREE.Mesh(new THREE.SphereGeometry(10.5, 20, 14), hull); bulbH.position.copy(rodPts[0]); topG.add(bulbH);
-  // brass clips where each piece hangs on the rod
-  [0.02, .2, .5, .8, .98].forEach(u => { const p = rodC.getPoint(u), tn = rodC.getTangent(u);
-    const c = new THREE.Mesh(new THREE.TorusGeometry(8, 2.6, 8, 24), cel(0xe0a93c)), h = new THREE.Mesh(new THREE.TorusGeometry(8, 4, 8, 24), hull);
-    [h, c].forEach(m => { m.position.copy(p); m.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), tn); topG.add(m); }); });
+    if (grp){ comp.sc.remove(grp); compG = onPlane(700, 46, 0, topG); compG.inner.add(grp); grp.scale.setScalar(20); compG.inner.rotation.x = Math.PI/2; $('compass').style.visibility = 'hidden';
+      // restyle in the same metals: red case, brass band (the day half stays gold)
+      grp.traverse(o => { if (!o.isMesh || !o.material) return; const m = o.material;
+        if (Array.isArray(m)){ if (m[0] && m[0].color && m[0].color.getHex() === 0xd8c9a6) m[0] = metalSide(RED); if (m[2] && m[2].color) m[2] = metalSide(RED); return; }
+        if (!m.color) return; const hx = m.color.getHex();
+        if (hx === 0x5b6a9a) o.material = metalSide(RED); else if (hx === 0xf2d27a) o.material = metalSide(YEL); else if (hx === 0xf0b429) o.material = metalSide(0xf0b429); }); } }
   HOST.classList.add('hud3d');
-  hud3 = { rodLiq, compG, compDown: 0, tubeFrame, upFrame, drawers, drawerFrame, gridOn: false, getGrid: () => grid, orbs, orbFrame, gC, kick: 0, pc, coinS, ga, gearS, r3, sc, cam, gA, gB, links, linkHull, dummy, chainAt, NL, linkGap, A, B, spin: 0, fast: false };
+  hud3 = { compG, compDown: 0, tubeFrame, upFrame, drawers, drawerFrame, gridOn: false, getGrid: () => grid, orbs, orbFrame, kick: 0, pc, coinS, ga, gearS, r3, sc, cam, gA, spin: 0, fast: false };
   $('gear').addEventListener('mouseenter', () => hud3.fast = true); $('gear').addEventListener('mouseleave', () => hud3.fast = false);
   $('gear').addEventListener('focus', () => hud3.fast = true); $('gear').addEventListener('blur', () => hud3.fast = false);
 } catch (e) { console.warn('HUD 3D off:', e); }
@@ -6734,23 +6722,16 @@ function hud3Frame(now){
   if (hud3){
     hud3.kick *= Math.exp(-dt*2.2); const target = reduce ? 0 : (hud3.fast ? 4.2 : 0.9) + hud3.kick*9; wv += (target - wv) * Math.min(1, dt*6);
     hud3.spin += wv*dt;                                   // continuous, never stops
-    hud3.gA.rotation.z = -hud3.spin; hud3.gB.rotation.z = -hud3.spin * hud3.A.r / hud3.B.r; hud3.gC.rotation.z = hud3.spin * 30.5 / 11.5 + .2;
-    const off = hud3.spin * hud3.A.r;
-    for (let k = 0; k < hud3.NL; k++){ const [x, y, a] = hud3.chainAt(k*hud3.linkGap - off);
-      hud3.dummy.position.set(x, y, 3); hud3.dummy.rotation.set(0, 0, a); hud3.dummy.updateMatrix(); hud3.links.setMatrixAt(k, hud3.dummy.matrix);
-      hud3.dummy.position.z = 2; hud3.dummy.updateMatrix(); hud3.linkHull.setMatrixAt(k, hud3.dummy.matrix); }
-    hud3.links.instanceMatrix.needsUpdate = true; hud3.linkHull.instanceMatrix.needsUpdate = true;
+    hud3.gA.rotation.z = -hud3.spin;
     hud3.orbs.forEach(o => hud3.orbFrame(o, dt, h3T));
-    // coin and gears: turned to face the eye, then laid back onto the compass's plane; hover stands them up and brings them closer
+    // coin, compass and gear all face the eye like the plates; hover brings them forward
     const eye = hud3.cam.position, cs = hud3.coinS; cs.lift += ((cs.hover ? 1 : 0) - cs.lift) * Math.min(1, dt*7);
     if (hud3.compG){ const down = $('compassWrap').classList.contains('down') ? 1 : 0; hud3.compDown += (down - hud3.compDown)*Math.min(1, dt*6);
-      const c = hud3.compG, u = hud3.compDown; c.g.position.y = -48 - u*62; c.g.scale.setScalar(1 + u*.14); c.inner.rotation.x = hudTILT + u*.6; }
+      const c = hud3.compG, u = hud3.compDown; c.g.position.y = -46 - u*58; c.g.position.z = u*20; c.g.scale.setScalar(1 + u*.75); }
     [[hud3.pc, cs.lift], [hud3.ga, hud3.fast ? 1 : 0]].forEach(([o, up], k) => {
       if (k === 1){ hud3.gearS.tilt += (up - hud3.gearS.tilt) * Math.min(1, dt*6); up = hud3.gearS.tilt; }
-      o.inner.rotation.x = k === 0 ? (hudTILT + up*.8) : -(Math.PI/2 - hudTILT - up*.5);
       o.inner.position.z = up*14; o.g.scale.setScalar(1 + up*.12); });
     hud3.drawers.forEach(d => hud3.drawerFrame(d, dt)); hud3.tubeFrame();
-    hud3.rodLiq.uniforms.lvl.value = .18 + .55*Math.max(0, Math.sin((S.tod - .25)*Math.PI*2)*.5 + .5);
     hud3.r3.render(hud3.sc, hud3.cam);
   }
   requestAnimationFrame(hud3Frame);

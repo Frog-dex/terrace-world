@@ -243,7 +243,7 @@ body.twhud #panel{z-index:30}
 body.twhud .bcard.foe{left:16px;top:calc(min(1400px,100vw)*108/1400 + 34px + env(safe-area-inset-top,0px))!important;bottom:auto!important}
 body.twhud .bcard.me{right:16px;left:auto;top:calc(min(1400px,100vw)*108/1400 + 34px + env(safe-area-inset-top,0px))!important;bottom:auto!important}
 body.twhud .bpanel{bottom:calc(var(--twBotH,132px) + 12px + env(safe-area-inset-bottom,0px))!important}
-body.twhud #perf{top:calc(min(1400px,100vw)*112/1400 + env(safe-area-inset-top,0px))!important}
+body.twhud #perf{top:calc(min(1400px,100vw)*132/1400 + env(safe-area-inset-top,0px))!important}
 </style>
 </head>
 <body>
@@ -5886,20 +5886,25 @@ try {
   const sc = new THREE.Scene(), cam = new THREE.PerspectiveCamera(30, 880/560, .1, 100);
   sc.add(new THREE.HemisphereLight(0xffffff, 0xb9b2a0, 0.75)); const dl = new THREE.DirectionalLight(0xffffff, 1.3); dl.position.set(3,6,4); sc.add(dl);
   const c = document.createElement('canvas'); c.width = c.height = 1024; const g = c.getContext('2d');
-  g.fillStyle='#fbf8f0'; g.fillRect(0,0,1024,1024); g.translate(512,512);
+  g.clearRect(0,0,1024,1024); g.translate(512,512); g.fillStyle='rgba(255,252,240,.16)'; g.beginPath(); g.arc(0,0,470,0,7); g.fill();
   g.strokeStyle=INK; g.lineWidth=10; g.beginPath(); g.arc(0,0,470,0,7); g.stroke(); g.lineWidth=4; g.beginPath(); g.arc(0,0,330,0,7); g.stroke();
   for (let i=0;i<72;i++){ const a=i*Math.PI/36, l=i%9==0?60:i%3==0?36:20; g.lineWidth=i%9==0?8:4; g.beginPath(); g.moveTo(Math.cos(a)*450,Math.sin(a)*450); g.lineTo(Math.cos(a)*(450-l),Math.sin(a)*(450-l)); g.stroke(); }
-  g.font='bold 120px Helvetica'; g.textAlign='center'; g.textBaseline='middle';
-  [['N',0,-395],['S',0,395],['E',395,0],['W',-395,0]].forEach(([t,x,y])=>{ g.fillStyle=t==='N'?'#c0392b':INK; g.fillText(t,x*0.95,y*0.95); });
+  g.font='bold 120px Helvetica'; g.textAlign='center'; g.textBaseline='middle'; g.lineJoin='round';
+  [['N',0,-395],['S',0,395],['E',395,0],['W',-395,0]].forEach(([t,x,y])=>{ g.lineWidth=14; g.strokeStyle='rgba(255,255,255,.85)'; g.strokeText(t,x*0.95,y*0.95); g.fillStyle=t==='N'?'#c0392b':INK; g.fillText(t,x*0.95,y*0.95); }); g.strokeStyle=INK;
   g.fillStyle=INK; g.beginPath(); g.moveTo(0,-260); g.lineTo(40,0); g.lineTo(0,260); g.lineTo(-40,0); g.closePath(); g.fill();
   g.fillStyle='#c0392b'; g.beginPath(); g.moveTo(0,-260); g.lineTo(40,0); g.lineTo(-40,0); g.closePath(); g.fill();
   g.fillStyle='#fbf8f0'; g.beginPath(); g.arc(0,0,22,0,7); g.fill(); g.stroke();
   const tex = new THREE.CanvasTexture(c);
   const grp = new THREE.Group(); sc.add(grp);
   const face = new THREE.Group(); grp.add(face);
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(2,2,.22,96), [new THREE.MeshBasicMaterial({color:0xd8c9a6}), new THREE.MeshBasicMaterial({map:tex}), new THREE.MeshBasicMaterial({color:0xb8a67e})]);
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(2,2,.22,96), [new THREE.MeshBasicMaterial({color:0xd8c9a6}), new THREE.MeshBasicMaterial({map:tex, transparent:true, depthWrite:false}), new THREE.MeshBasicMaterial({color:0xb8a67e})]);
   body.rotation.y = Math.PI/2; face.add(body);
-  const outl = new THREE.Mesh(new THREE.CylinderGeometry(2.05,2.05,.26,96), new THREE.MeshBasicMaterial({color:0x2b2466, side:THREE.BackSide})); grp.add(outl);
+  const rimInk = new THREE.Mesh(new THREE.TorusGeometry(2.03,.05,8,120), new THREE.MeshBasicMaterial({color:0x2b2466})); rimInk.rotation.x=Math.PI/2; rimInk.position.y=.11; grp.add(rimInk);
+  // the glass lens: a shallow dome, clear in the middle, catching light at its edge, with one hard highlight
+  const lens = new THREE.Mesh(new THREE.SphereGeometry(2, 64, 24, 0, Math.PI*2, 0, Math.PI/2), new THREE.ShaderMaterial({ transparent:true, depthWrite:false,
+    vertexShader:'varying vec3 vN; varying vec3 vV; void main(){ vec4 mv = modelViewMatrix*vec4(position,1.0); vN = normalize(normalMatrix*normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix*mv; }',
+    fragmentShader:'varying vec3 vN; varying vec3 vV; void main(){ vec3 n = normalize(vN); float f = 1.0 - abs(dot(n, vV)); float hi = step(0.965, dot(n, normalize(vec3(-0.5,0.62,0.6)))); float hi2 = step(0.985, dot(n, normalize(vec3(0.45,0.5,0.75)))); gl_FragColor = vec4(mix(vec3(0.86,0.93,1.0), vec3(1.0), hi + hi2), 0.05 + 0.4*f*f + 0.7*hi + 0.55*hi2); }' }));
+  lens.scale.set(1, .2, 1); lens.position.y = .11; lens.renderOrder = 3; face.add(lens);
   const band = new THREE.Mesh(new THREE.TorusGeometry(2.15,.13,20,120), new THREE.MeshBasicMaterial({color:0x5b6a9a})); band.rotation.x=Math.PI/2; band.position.y=.08; grp.add(band);
   const day = new THREE.Mesh(new THREE.TorusGeometry(2.15,.135,20,120,Math.PI), new THREE.MeshBasicMaterial({color:0xf2d27a})); day.rotation.x=Math.PI/2; day.rotation.z=Math.PI; day.position.y=.08; grp.add(day);
   const mk = (rad,col,em) => { const m=new THREE.Mesh(new THREE.SphereGeometry(rad,32,16), new THREE.MeshBasicMaterial({color:col})); const o=new THREE.Mesh(m.geometry,new THREE.MeshBasicMaterial({color:0x2b2466, side:THREE.BackSide})); o.scale.setScalar(1.12); m.add(o); grp.add(m); return m; };
@@ -6147,13 +6152,14 @@ function buildBox(id){
   const sd = [...id].reduce((a, ch) => a + ch.charCodeAt(0), 0);
   const defs = `<defs><linearGradient id="mt-${id}" x1="0" y1="0" x2=".45" y2="1"><stop offset="0" stop-color="#ffe796"/><stop offset=".42" stop-color="#f9cf62"/><stop offset=".78" stop-color="#f6c455"/><stop offset="1" stop-color="#eeab40"/></linearGradient>`
     + `<linearGradient id="hl-${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff6d2" stop-opacity="1"/><stop offset=".45" stop-color="#fff6d2" stop-opacity=".8"/><stop offset=".62" stop-color="#fff6d2" stop-opacity="0"/></linearGradient>`
-    + `<linearGradient id="lo-${id}" x1="0" y1="0" x2="1" y2="1"><stop offset=".5" stop-color="#e39a30" stop-opacity="0"/><stop offset=".75" stop-color="#e39a30" stop-opacity=".9"/></linearGradient></defs>`;
+    + `<linearGradient id="lo-${id}" x1="0" y1="0" x2="1" y2="1"><stop offset=".5" stop-color="#e39a30" stop-opacity="0"/><stop offset=".75" stop-color="#e39a30" stop-opacity=".9"/></linearGradient>`
+    + `<linearGradient id="sw-${id}" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="260" y2="140"><stop offset="0" stop-color="#fff8dc" stop-opacity="0"/><stop offset=".45" stop-color="#fff8dc" stop-opacity=".5"/><stop offset=".55" stop-color="#fffdf0" stop-opacity=".62"/><stop offset="1" stop-color="#fff8dc" stop-opacity="0"/><animateTransform attributeName="gradientTransform" type="translate" from="${-W - 400} 0" to="${W + 400} 0" dur="${(W + 800)/95}s" repeatCount="indefinite"/></linearGradient></defs>`;
   // a few four-point glints along the frame, placed differently on every box
   const rng = k => { const x = Math.sin(sd*12.9898 + k*78.233)*43758.5453; return x - Math.floor(x); };
   const glints = [0, 1, 2].map(k => { const side = Math.floor(rng(k)*3), t = .15 + rng(k + 5)*.7;
     const [gx, gy] = side === 0 ? [c + (W - 2*c)*t, -rim/2] : side === 1 ? [-rim/2, c + (H - 2*c)*t*.6] : [W + rim/2, c + (H - 2*c)*t*.35];
     const r1 = 6 + rng(k + 9)*5; return `<path d="M${gx} ${gy - r1}L${gx + 1.6} ${gy - 1.6}L${gx + r1} ${gy}L${gx + 1.6} ${gy + 1.6}L${gx} ${gy + r1}L${gx - 1.6} ${gy + 1.6}L${gx - r1} ${gy}L${gx - 1.6} ${gy - 1.6}Z" fill="#fffdf2"/>`; }).join('');
-  root.querySelector('.rim').innerHTML = `<svg width="${W + 2*rim + 8}" height="${H + 2*rim + 8}" style="left:${24-rim}px;top:${24-rim}px">${defs}<path transform="translate(${rim+4} ${rim+4})" d="${soft(Q, 14)} ${d(P)}" fill="url(#mt-${id})" fill-rule="evenodd"/><g transform="translate(${rim+4} ${rim+4})"><path d="${soft(Q.map(([x, y]) => [x + (x < W/2 ? 5 : -5), y + (y < H/2 ? 5 : -5)]), 12)}" fill="none" stroke="url(#hl-${id})" stroke-width="5" stroke-linejoin="round"/><path d="${d(P.map(([x, y]) => [x + (x < W/2 ? -4 : 4), y + (y < H/2 ? -4 : 4)]))}" fill="none" stroke="url(#lo-${id})" stroke-width="6" stroke-linejoin="round"/>${glints}<path d="${soft(Q, 14)} ${d(P)}" fill="none" stroke="#2b2466" stroke-width="5" stroke-linejoin="round"/></g></svg>`;
+  root.querySelector('.rim').innerHTML = `<svg width="${W + 2*rim + 8}" height="${H + 2*rim + 8}" style="left:${24-rim}px;top:${24-rim}px">${defs}<path transform="translate(${rim+4} ${rim+4})" d="${soft(Q, 14)} ${d(P)}" fill="url(#mt-${id})" fill-rule="evenodd"/><g transform="translate(${rim+4} ${rim+4})"><path d="${soft(Q.map(([x, y]) => [x + (x < W/2 ? 5 : -5), y + (y < H/2 ? 5 : -5)]), 12)}" fill="none" stroke="url(#hl-${id})" stroke-width="5" stroke-linejoin="round"/><path d="${d(P.map(([x, y]) => [x + (x < W/2 ? -4 : 4), y + (y < H/2 ? -4 : 4)]))}" fill="none" stroke="url(#lo-${id})" stroke-width="6" stroke-linejoin="round"/>${glints}<path d="${soft(Q, 14)} ${d(P)}" fill="url(#sw-${id})" fill-rule="evenodd"/><path d="${soft(Q, 14)} ${d(P)}" fill="none" stroke="#2b2466" stroke-width="5" stroke-linejoin="round"/></g></svg>`;
 }
 const HINGE = {"x1": 436, "x2": 964, "barTop": 14};   // the box's bottom edge runs between two slot lines on the bar's top edge
 /* hinged boxes: the wheel, the bag and the cards stand on the taskbar. The hinge is set back along the bar's back top edge
@@ -6432,6 +6438,7 @@ function threePath(P, r, path){ const s = smoothCorners(P, r); path.moveTo(s[0].
 $('svPlateL').setAttribute('d', svgPath(G3.plateL, 15)); $('svPlateR').setAttribute('d', svgPath(G3.plateR, 15));
 
 let hud3 = null; let hudTILT = 45*Math.PI/180;
+const GOLD_U = { t: { value: 0 }, sunX: { value: 0 }, day: { value: 1 }, sw: { value: 1400 } };
 try {
   const cv = $('hud3d'), r3 = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true });
   r3.setPixelRatio(Math.min(2, devicePixelRatio || 1)); r3.setClearColor(0, 0);
@@ -6449,9 +6456,9 @@ try {
   const YEL = 0xf3d37a, RED = 0xc0392b;
   const GOLD_NOISE = 'float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7)))*43758.5453); } float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0 - 2.0*f); return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y); } float fbm(vec2 p){ return vn(p)*0.55 + vn(p*2.07 + 7.3)*0.3 + vn(p*4.31 + 1.7)*0.15; }';
   let goldSeed = 0;
-  const metalFront = (hex, y0, y1) => new THREE.ShaderMaterial({ uniforms: { y0: { value: y0 }, y1: { value: y1 }, seed: { value: new THREE.Vector2(37.1*(++goldSeed), 91.7*goldSeed) } },
-    vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
-    fragmentShader: 'uniform float y0; uniform float y1; uniform vec2 seed; varying vec3 vP; ' + GOLD_NOISE + ' void main(){ vec2 p = vP.xy; float x = p.x + seed.x; float v = clamp((y1 - vP.y)/max(1.0, y1 - y0), 0.0, 1.0); vec3 lite = vec3(1.0, 0.93, 0.62), mid = vec3(0.98, 0.81, 0.38), warm = vec3(0.95, 0.66, 0.24), c = mix(mid, vec3(1.0, 0.86, 0.46), 0.5 - 0.5*sin(x*0.0021 + seed.y)); if (v < 0.1 + 0.03*sin(x*0.011)) c = lite; if (v > 0.8 + 0.05*sin(x*0.007 + seed.y)) c = warm; float cy = 0.36 + 0.1*sin(x*0.0062 + seed.y) + 0.07*sin(x*0.0171 + seed.x*0.3); float w = 0.035 + 0.05*vn(vec2(x*0.012, seed.y)); float on = step(0.36, vn(vec2(x*0.0045, seed.x))); if (abs(v - cy) < w && on > 0.5) c = lite; vec2 cell = floor(p/150.0 + seed*0.01); float r = h2(cell); if (r > 0.72){ vec2 ctr = (cell + 0.5 + (vec2(h2(cell + 1.3), h2(cell + 2.9)) - 0.5)*0.5)*150.0 - seed*1.5; vec2 d = abs(p - ctr); float star = step(d.x, 1.3)*step(d.y, 8.0 + 5.0*r) + step(d.y, 1.3)*step(d.x, 8.0 + 5.0*r) + step(length(d), 2.6); if (star > 0.0 && v > 0.08 && v < 0.7) c = vec3(1.0, 0.99, 0.93); } gl_FragColor = vec4(c, 1.0); }' });
+  const metalFront = (hex, y0, y1) => new THREE.ShaderMaterial({ uniforms: Object.assign({ y0: { value: y0 }, y1: { value: y1 }, seed: { value: new THREE.Vector2(37.1*(++goldSeed), 91.7*goldSeed) } }, GOLD_U),
+    vertexShader: 'varying vec3 vP; varying vec2 vW; void main(){ vP = position; vW = (modelMatrix*vec4(position,1.0)).xy; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+    fragmentShader: 'uniform float y0; uniform float y1; uniform vec2 seed; uniform float t; uniform float sunX; uniform float day; uniform float sw; varying vec3 vP; varying vec2 vW; ' + GOLD_NOISE + ' void main(){ vec2 p = vP.xy; float x = p.x + seed.x; float v = clamp((y1 - vP.y)/max(1.0, y1 - y0), 0.0, 1.0); vec3 lite = vec3(1.0, 0.93, 0.62), mid = vec3(0.98, 0.81, 0.38), warm = vec3(0.95, 0.66, 0.24), c = mix(mid, vec3(1.0, 0.86, 0.46), 0.5 - 0.5*sin(x*0.0021 + seed.y)); if (v < 0.1 + 0.03*sin(x*0.011)) c = lite; if (v > 0.8 + 0.05*sin(x*0.007 + seed.y)) c = warm; float cy = 0.36 + 0.1*sin(x*0.0062 + seed.y) + 0.07*sin(x*0.0171 + seed.x*0.3); float w = 0.035 + 0.05*vn(vec2(x*0.012, seed.y)); float on = step(0.36, vn(vec2(x*0.0045, seed.x))); if (abs(v - cy) < w && on > 0.5) c = lite; vec2 cell = floor(p/150.0 + seed*0.01); float r = h2(cell); if (r > 0.72){ vec2 ctr = (cell + 0.5 + (vec2(h2(cell + 1.3), h2(cell + 2.9)) - 0.5)*0.5)*150.0 - seed*1.5; vec2 d = abs(p - ctr); float star = step(d.x, 1.3)*step(d.y, 8.0 + 5.0*r) + step(d.y, 1.3)*step(d.x, 8.0 + 5.0*r) + step(length(d), 2.6); if (star > 0.0 && v > 0.08 && v < 0.7) c = vec3(1.0, 0.99, 0.93); } c *= 0.965 + 0.07*fbm(p*0.008 + seed*0.003 + vec2(t*0.02, 0.0)); float sp = mod(t*95.0, sw + 1400.0) - 700.0 + sunX*160.0; float dd = (vW.x - vW.y*0.55) - sp; c = mix(c, vec3(1.0, 0.97, 0.84), 0.42*exp(-dd*dd/9000.0)); float dd2 = dd + 70.0; c = mix(c, vec3(1.0, 0.98, 0.9), 0.3*exp(-dd2*dd2/700.0)); c *= mix(0.84, 1.03, day); c = mix(c, c*vec3(0.86, 0.92, 1.12), (1.0 - day)*0.55); gl_FragColor = vec4(min(c, vec3(1.0)), 1.0); }' });
   const metalSide = hex => new THREE.ShaderMaterial({ uniforms: { col: { value: new THREE.Color(hex) } },
     vertexShader: 'varying vec3 vN; varying vec3 vP; void main(){ vP = position; vN = normalize(normalMatrix*normal); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
     fragmentShader: 'uniform vec3 col; varying vec3 vN; varying vec3 vP; void main(){ vec3 n = normalize(vN), L = normalize(vec3(-0.35,0.75,0.55)); float l = dot(n, L); float k = l > 0.6 ? 1.2 : (l > 0.2 ? 1.0 : (l > -0.25 ? 0.78 : 0.6)); float sp = step(0.93, dot(n, normalize(L + vec3(0.0,0.0,1.0)))); float br = (fract(sin(floor(vP.z*1.1)*12.9898)*43758.5453) - 0.5)*0.06; vec3 c = mix(col*(k + br), vec3(1.0, 0.95, 0.85), sp*0.55); gl_FragColor = vec4(min(c, vec3(1.0)), 1.0); }' });
@@ -6559,23 +6566,18 @@ try {
     fragmentShader: 'varying vec3 vN; varying vec3 vV; void main(){ vec3 n = normalize(vN); float f = 1.0 - abs(dot(n, vV)); float hi = step(0.93, dot(n, normalize(vec3(-0.45,0.7,0.55)))); float rim = step(0.72, f); gl_FragColor = vec4(mix(vec3(0.9,0.94,1.0), vec3(1.0), hi), 0.06 + 0.35*f*f + 0.55*hi + 0.12*rim); }' });
   const liqMat = () => new THREE.ShaderMaterial({ side: THREE.DoubleSide, uniforms: { col: { value: new THREE.Color() }, lvl: { value: 0 }, t: { value: 0 }, wob: { value: 1 } },
     vertexShader: 'varying vec3 vP; varying vec3 vN; void main(){ vP = position; vN = normalize(normalMatrix*normal); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
-    fragmentShader: 'uniform vec3 col; uniform float lvl; uniform float t; uniform float wob; varying vec3 vP; varying vec3 vN; void main(){ float w = lvl + wob*(1.6*sin(vP.x*0.16 + t*2.2) + 1.1*sin(vP.z*0.21 - t*1.5)); if (vP.y > w) discard; float l = dot(normalize(vN), normalize(vec3(-0.35,0.75,0.55))); float k = gl_FrontFacing ? (l > 0.3 ? 1.0 : (l > -0.25 ? 0.8 : 0.62)) : 0.5; float depth = clamp((w - vP.y)/60.0, 0.0, 1.0); gl_FragColor = vec4(col*k*(1.0 - depth*0.35), 1.0); }' });
+    fragmentShader: 'uniform vec3 col; uniform float lvl; uniform float t; uniform float wob; varying vec3 vP; varying vec3 vN; void main(){ float w = lvl + wob*(1.6*sin(vP.x*0.16 + t*2.2) + 1.1*sin(vP.z*0.21 - t*1.5)); if (vP.y > w) discard; float l = dot(normalize(vN), normalize(vec3(-0.35,0.75,0.55))); float k = gl_FrontFacing ? (l > 0.3 ? 1.0 : (l > -0.25 ? 0.8 : 0.62)) : 0.5; float depth = clamp((w - vP.y)/60.0, 0.0, 1.0); vec3 c = col*k*(1.0 - depth*0.3); float a1 = pow(0.5 + 0.5*sin(vP.y*0.19 + sin(vP.x*0.075 + t*1.3)*2.6 + sin(vP.z*0.09 - t*0.9)*1.8 + t*1.9), 14.0); float a2 = pow(0.5 + 0.5*sin(vP.x*0.15 - vP.y*0.08 + sin(vP.y*0.11 + t*1.1)*2.2 - t*1.6), 18.0); c = mix(c, vec3(1.0), clamp(a1*0.75 + a2*0.55, 0.0, 0.85)); c = mix(c, min(col*1.6 + 0.25, vec3(1.0)), 0.18*(0.5 + 0.5*sin(t*2.7 + vP.y*0.05))); gl_FragColor = vec4(c, 1.0); }' });
   const surfMat = () => new THREE.ShaderMaterial({ side: THREE.DoubleSide, uniforms: { col: { value: new THREE.Color() }, t: { value: 0 } },
     vertexShader: 'varying vec2 vU; void main(){ vU = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
     fragmentShader: 'uniform vec3 col; uniform float t; varying vec2 vU; void main(){ float r = length(vU - 0.5)*2.0; float ring = step(0.9, fract(r*3.0 - t*0.6)) * 0.18; gl_FragColor = vec4(mix(col*1.18, vec3(1.0), ring + step(0.93, r)*0.25), 1.0); }' });
   const orbs = [];
   function orb3(kind, cx, cy){
     const R = 46, g = new THREE.Group(), base = new THREE.Vector3(kind === 'h' ? cx : BW - cx, -cy, 0); g.position.copy(base); botG.add(g);
-    const ink = new THREE.Mesh(new THREE.SphereGeometry(R + 3.2, 48, 32), hull); g.add(ink);
+    const ink = new THREE.Mesh(new THREE.RingGeometry(R - .6, R + 3.4, 96), flat(INKC)); g.add(ink);
     const liq = liqMat(), liquid = new THREE.Mesh(new THREE.SphereGeometry(R - 3, 48, 32), liq); g.add(liquid);
     const sm = surfMat(), surf = new THREE.Mesh(new THREE.CircleGeometry(1, 48), sm); surf.rotation.x = -Math.PI/2; g.add(surf);
     const glass = new THREE.Mesh(new THREE.SphereGeometry(R, 48, 32), glassMat()); glass.renderOrder = 3; g.add(glass);
-    // anima: a white charge round the globe, like the plasma aurora round a spirit in a fight. It hugs the glass and
-    // fades outward, with bands of light running round it
-    const GR = R + 20, glowM = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { col: { value: new THREE.Color() }, t: { value: 0 }, r0: { value: (R + 2)/GR } },
-      vertexShader: 'varying vec3 vN; varying vec3 vV; varying vec3 vP; void main(){ vP = position; vec4 mv = modelViewMatrix*vec4(position,1.0); vN = normalize(normalMatrix*normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix*mv; }',
-      fragmentShader: 'uniform vec3 col; uniform float t; uniform float r0; varying vec3 vN; varying vec3 vV; varying vec3 vP; void main(){ float d = abs(dot(normalize(vN), vV)); float rho = sqrt(max(0.0, 1.0 - d*d)); float k = rho > r0 ? exp(-(rho - r0)*11.0) : exp(-(r0 - rho)*30.0); float a = atan(vP.y, vP.x); float b1 = 0.5 + 0.5*sin(a*5.0 + t*2.4 + sin(vP.z*0.09 + t*1.6)*2.2); float b2 = 0.5 + 0.5*sin(a*11.0 - t*3.3 + vP.y*0.05); k *= 0.5 + 0.45*b1 + 0.3*b2*b2; vec3 c = mix(col*1.2, vec3(1.0), 0.45 + 0.4*b2); gl_FragColor = vec4(min(c, vec3(1.0)), clamp(k*1.25, 0.0, 1.0)); }' });
-    const glow = new THREE.Mesh(new THREE.SphereGeometry(GR, 64, 40), glowM); glow.renderOrder = 5; g.add(glow);
+
     // bubbles rising through the liquid
     const bub = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .7 }), 7); g.add(bub);
     // dotted ring orbiting the globe, tilted so you see it in perspective
@@ -6587,15 +6589,15 @@ try {
     const pipeGlass = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide,
       vertexShader: 'varying vec2 vU; varying vec3 vN; varying vec3 vV; void main(){ vU = uv; vec4 mv = modelViewMatrix*vec4(position,1.0); vN = normalize(normalMatrix*normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix*mv; }',
       fragmentShader: 'varying vec2 vU; varying vec3 vN; varying vec3 vV; void main(){ ' + fade + ' vec3 n = normalize(vN); float e = 1.0 - abs(dot(n, vV)); float hi = step(0.8, dot(n, normalize(vec3(-0.5,0.8,0.2)))); float edge = step(0.9, e); vec3 c = mix(vec3(0.92,0.95,1.0), vec3(0.17,0.14,0.4), edge); gl_FragColor = vec4(mix(c, vec3(1.0), hi*(1.0-edge)), (0.08 + 0.3*e*e + 0.45*hi + 0.8*edge) * fadeA); }' });
-    const flow = new THREE.ShaderMaterial({ transparent: true, uniforms: { col: { value: new THREE.Color() }, t: { value: 0 } },
-      vertexShader: 'varying vec2 vU; varying vec3 vN; void main(){ vU = uv; vN = normalize(normalMatrix*normal); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
-      fragmentShader: 'uniform vec3 col; uniform float t; varying vec2 vU; varying vec3 vN; void main(){ ' + fade + ' float l = dot(normalize(vN), normalize(vec3(-0.35,0.75,0.55))); float k = l > 0.35 ? 1.0 : (l > -0.2 ? 0.8 : 0.62); float b = step(0.9, fract(vU.y*14.0 + t*0.9)) * step(0.5, fract(vU.x*3.0)); gl_FragColor = vec4(mix(col*k, vec3(1.0), b*0.6), fadeA); }' });
+    const flow = new THREE.ShaderMaterial({ transparent: true, uniforms: { col: { value: new THREE.Color() }, t: { value: 0 }, lvlW: { value: 1e6 } },
+      vertexShader: 'varying vec2 vU; varying vec3 vN; varying float vWY; void main(){ vU = uv; vN = normalize(normalMatrix*normal); vWY = (modelMatrix*vec4(position,1.0)).y; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+      fragmentShader: 'uniform vec3 col; uniform float t; uniform float lvlW; varying vec2 vU; varying vec3 vN; varying float vWY; void main(){ if (vWY > lvlW) discard; ' + fade + ' float l = dot(normalize(vN), normalize(vec3(-0.35,0.75,0.55))); float k = l > 0.35 ? 1.0 : (l > -0.2 ? 0.8 : 0.62); float b = step(0.9, fract(vU.y*14.0 + t*0.9)) * step(0.5, fract(vU.x*3.0)); gl_FragColor = vec4(mix(col*k, vec3(1.0), b*0.6), fadeA); }' });
     // the bottle neck: a glass pipe that runs down beside the bar's angled end, parallel to it with a strip of white between,
     // and goes back into the screen as it goes down (so it narrows). Laid out in place(), where the eye is known.
     const pg = new THREE.Group(); botG.add(pg);
     const pipeParts = { glass: pipeGlass, flow };
     const mir = kind === 'h' ? 1 : -1;
-    const o = { glowM, kind, g, pg, pipeParts, cx, cy, base, R, liq, sm, surf, bub, ringG, flow, mir, scale: 1, hover: false, lift: 0, liftT: 0, slosh: 0,
+    const o = { ink, kind, g, pg, pipeParts, cx, cy, base, R, liq, sm, surf, bub, ringG, flow, mir, scale: 1, hover: false, lift: 0, liftT: 0, slosh: 0,
       bubY: Array.from({ length: 7 }, () => Math.random()), el: $(kind === 'h' ? 'orbH' : 'orbM') };
     o.el.addEventListener('mouseenter', () => o.hover = true); o.el.addEventListener('mouseleave', () => o.hover = false);
     o.el.addEventListener('focus', () => o.hover = true); o.el.addEventListener('blur', () => o.hover = false);
@@ -6611,10 +6613,11 @@ try {
     o.g.position.set(o.base.x, o.base.y, o.base.z + (o.scale - 1)*120 + up*60);
     o.g.scale.setScalar(o.scale*(1 + up*.08));
     { const wp = o.g.position.clone().applyMatrix4(botG.matrixWorld), cp = hud3.cam.position; o.g.rotation.x = -Math.atan2(cp.y - wp.y, cp.z - wp.z)*0.9; }
-    o.ringG.rotation.z += dt*(o.hover ? 1.6 : .45)*o.mir;
+    o.ringG.rotation.z += dt*(o.hover ? 1.6 : .45)*o.mir; o.ink.lookAt(hud3.cam.position);
     const val = o.kind === 'h' ? S.health : S.anima, fill = Math.max(0, (val - .25)/.75), [r,g,b] = orbColor(o.kind, val), Rl = o.R - 3;
     const lvl = -Rl + 2*Rl*fill; o.liq.uniforms.lvl.value = lvl; o.liq.uniforms.t.value = reduce ? 0 : t; o.liq.uniforms.wob.value = 1 + o.slosh*3;
-    [o.liq, o.sm, o.flow, o.glowM].forEach(m => m.uniforms.col.value.setRGB(r/255, g/255, b/255)); o.sm.uniforms.t.value = t; o.glowM.uniforms.t.value = reduce ? 0 : t; o.flow.uniforms.t.value = reduce ? 0 : t;
+    [o.liq, o.sm, o.flow].forEach(m => m.uniforms.col.value.setRGB(r/255, g/255, b/255)); o.sm.uniforms.t.value = t; o.flow.uniforms.t.value = reduce ? 0 : t;
+    o.g.updateMatrixWorld(true); o.flow.uniforms.lvlW.value = new THREE.Vector3(0, fill >= .999 ? Rl + 40 : lvl, 0).applyMatrix4(o.g.matrixWorld).y;
     const sr = Math.sqrt(Math.max(0, Rl*Rl - lvl*lvl)); o.surf.position.y = lvl; o.surf.scale.set(sr, sr, 1);
     o.surf.rotation.x = -Math.PI/2 + Math.sin(t*1.7)*.03*(1 + o.slosh*4); o.surf.rotation.y = Math.cos(t*1.3)*.03*(1 + o.slosh*4);
     const dm = new THREE.Object3D();
@@ -6732,11 +6735,13 @@ try {
     o.pg.position.copy(A); o.pg.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), axis);
     const tip = 5;
     const cone = (r0, r1, mat) => { const c = new THREE.Mesh(new THREE.CylinderGeometry(r1, r0, Lc, 48, 1, true), mat); c.position.y = Lc/2; o.pg.add(c); return c; };
-    cone(tip + 3, rb + 3, hull); cone(tip*.55, rb*.62, o.pipeParts.flow); const g = cone(tip, rb, o.pipeParts.glass); g.renderOrder = 1;
+    cone(tip*.55, rb*.62, o.pipeParts.flow); const g = cone(tip, rb, o.pipeParts.glass); g.renderOrder = 1;
+    [1, -1].forEach(sd => { const w = 3.2, sh = new THREE.Shape([new THREE.Vector2(sd*(tip - .4), 0), new THREE.Vector2(sd*(tip + w), 0), new THREE.Vector2(sd*(rb + w), Lc + 1.5), new THREE.Vector2(sd*(rb - .4), Lc + 1.5)]);
+      const e = new THREE.Mesh(new THREE.ShapeGeometry(sh), flat(INKC)); e.position.z = 1; e.renderOrder = 4; o.pg.add(e); });
     const ring = new THREE.Mesh(new THREE.TorusGeometry(tip + 1.5, 2.4, 10, 28), metalSide(YEL)); ring.rotation.x = Math.PI/2; ring.position.y = 3;
     const ringH = new THREE.Mesh(new THREE.TorusGeometry(tip + 1.5, 3.8, 10, 28), hull); ringH.rotation.x = Math.PI/2; ringH.position.y = 3;
     o.pg.add(ringH, ring);
-    o.nozzle = [X(A2[0]), -A2[1]];
+    o.nozzle = [X(A2[0]), -A2[1]]; o.nozDir = [-axis.x, -axis.y];
   }
   // the reserve: a thin glass tube from each beaker's nozzle, down under the bar, meeting in the middle.
   // It holds the last 25% of health (left) and anima (right); as you drop below a quarter it drains back toward the beaker.
@@ -6744,11 +6749,12 @@ try {
   const tubeLiq = { h: null, m: null };
   function layTubes(){
     botG.remove(tubeG); tubeG = new THREE.Group(); botG.add(tubeG);
-    const yT = -121, mid = BW/2;
+    const yT = -(G3.bar[2][1] + 3), mid = BW/2;
     orbs.forEach(o => {
-      const [nx, ny] = o.nozzle, sgn = o.kind === 'h' ? 1 : -1;
-      const pts = [[nx, ny], [nx + sgn*6, ny - 6], [nx + sgn*16, yT], [mid - sgn*14, yT], [mid, yT]].map(([x, y]) => new THREE.Vector3(x, y, -4));
-      const c = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', .2), len = c.getLength();
+      const [nx, ny] = o.nozzle, [dx, dy] = o.nozDir, sgn = o.kind === 'h' ? 1 : -1, k = Math.max(1, (ny - yT)/Math.max(.2, -dy));
+      const bend = new THREE.QuadraticBezierCurve3(new THREE.Vector3(nx, ny, -4), new THREE.Vector3(nx + dx*k, yT, -4), new THREE.Vector3(nx + dx*k + sgn*18, yT, -4));
+      const pts = bend.getPoints(10).concat([new THREE.Vector3(mid, yT, -4)]);
+      const c = new THREE.CatmullRomCurve3(pts, false, 'centripetal'), len = c.getLength();
       tubeG.add(new THREE.Mesh(new THREE.TubeGeometry(c, 90, 7.6, 12, false), hull));
       const lm = new THREE.ShaderMaterial({ uniforms: { col: { value: new THREE.Color() }, t: { value: 0 }, fill: { value: 1 }, len: { value: len } },
         vertexShader: 'varying vec2 vU; varying vec3 vN; void main(){ vU = uv; vN = normalize(normalMatrix*normal); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
@@ -6785,7 +6791,7 @@ try {
   // the compass: moved out of its own little scene into this one, lying on the same plane as the coin and gears
   let compG = null;
   if (typeof comp !== 'undefined' && comp && comp.sc){ const grp = comp.sc.children.find(c => c.type === 'Group');
-    if (grp){ comp.sc.remove(grp); compG = onPlane(700, 48, 0, topG); compG.inner.add(grp); grp.scale.setScalar(44); $('compass').style.visibility = 'hidden'; } }
+    if (grp){ comp.sc.remove(grp); compG = onPlane(700, 50, 0, topG); compG.inner.add(grp); grp.scale.setScalar(52); $('compass').style.visibility = 'hidden'; } }
   HOST.classList.add('hud3d');
   hud3 = { compG, compDown: 0, tubeFrame, upFrame, drawers, drawerFrame, gridOn: false, getGrid: () => grid, orbs, orbFrame, kick: 0, pc, coinS, ga, gearS, r3, sc, cam, gA, spin: 0, fast: false };
   $('gear').addEventListener('mouseenter', () => hud3.fast = true); $('gear').addEventListener('mouseleave', () => hud3.fast = false);
@@ -6803,11 +6809,12 @@ function hud3Frame(now){
     // coin, compass and gear all face the eye like the plates; hover brings them forward
     const eye = hud3.cam.position, cs = hud3.coinS; cs.lift += ((cs.hover ? 1 : 0) - cs.lift) * Math.min(1, dt*7);
     if (hud3.compG){ const down = $('compassWrap').classList.contains('down') ? 1 : 0; hud3.compDown += (down - hud3.compDown)*Math.min(1, dt*6);
-      const c = hud3.compG, u = hud3.compDown; c.g.position.y = -48 - u*62; c.g.scale.setScalar(1 + u*.14); c.inner.rotation.x = hudTILT + u*.6; }
+      const c = hud3.compG, u = hud3.compDown; c.g.position.y = -50 - u*62; c.g.scale.setScalar(1 + u*.14); c.inner.rotation.x = hudTILT + u*.6; }
     [[hud3.pc, cs.lift], [hud3.ga, hud3.fast ? 1 : 0]].forEach(([o, up], k) => {
       if (k === 1){ hud3.gearS.tilt += (up - hud3.gearS.tilt) * Math.min(1, dt*6); up = hud3.gearS.tilt; }
       o.inner.position.z = up*14; o.g.scale.setScalar(1 + up*.12); });
     hud3.drawers.forEach(d => hud3.drawerFrame(d, dt)); hud3.tubeFrame();
+    { const a = (S.tod - .25)*Math.PI*2; GOLD_U.t.value = reduce ? 0 : h3T; GOLD_U.sunX.value = Math.cos(a); GOLD_U.day.value = Math.max(0, Math.min(1, Math.sin(a)*1.3 + .45)); GOLD_U.sw.value = innerWidth; }
     hud3.r3.render(hud3.sc, hud3.cam);
   }
   requestAnimationFrame(hud3Frame);

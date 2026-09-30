@@ -2046,13 +2046,13 @@ const GUARD_ROUTE = [
    Browsers only allow sound after a tap or key, so it starts on the first one (or the small SOUND switch). Everything is
    driven by the same clock as the picture. */
 window.SOUND = (() => {
-  let ctx = null, out = null, noise = null, on = false, lastT = -1;
+  let ctx = null, out = null, noise = null, on = false, lastT = -1, offline = false;
   const bufs = {}, beds = {};
   const mk = (type, props) => { const n = ctx['create' + type](); for (const k in props){ if (n[k] instanceof AudioParam) n[k].value = props[k]; else n[k] = props[k]; } return n; };
   function noiseSource(){ const s = ctx.createBufferSource(); s.buffer = noise; s.loop = true; s.start(); return s; }
   function bed(name, chain){ const g = mk('Gain', { gain: 0 }); chain(g); g.connect(out); beds[name] = g; return g; }
-  function start(){
-    ctx = new (window.AudioContext || window.webkitAudioContext)(); out = ctx.createGain(); out.gain.value = 0.85;
+  function start(custom){
+    ctx = custom || new (window.AudioContext || window.webkitAudioContext)(); out = ctx.createGain(); out.gain.value = 0.85;
     const comp = ctx.createDynamicsCompressor(); out.connect(comp); comp.connect(ctx.destination);
     noise = ctx.createBuffer(1, ctx.sampleRate*2, ctx.sampleRate); const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random()*2 - 1;
     // the snow: bright hiss
@@ -2143,7 +2143,16 @@ window.SOUND = (() => {
   addEventListener('pointerdown', first); addEventListener('keydown', first);
   addEventListener('DOMContentLoaded', () => document.body.appendChild(btn)); if (document.body) document.body.appendChild(btn);
   function fadeOut(){ if (ctx && out) out.gain.setTargetAtTime(0, ctx.currentTime, 0.12); }
-  return { update, setFire, setCues, fadeOut, play: (...a) => ctx && on && play(...a), thump: (w, v) => ctx && on && thump(w, v), squelch: w => ctx && on && squelch(w), burst: (...a) => ctx && on && burst(...a), blip: (...a) => ctx && on && blip(...a), get on(){ return on; } };
+  // for a review video: replay the picture's own sound calls (frame k at k/fps seconds) into an offline mix
+  async function renderOffline(log, fps, seconds){
+    const real = new OfflineAudioContext(2, Math.ceil(44100*seconds), 44100); let now = 0;
+    const px = new Proxy(real, { get(o, k){ if (k === 'currentTime') return now; const v = o[k]; return typeof v === 'function' ? v.bind(o) : v; } });
+    offline = true; start(px); on = true;
+    for (let i = 0; i < 150 && Object.keys(bufs).length < SFX.length + 2; i++) await new Promise(r => setTimeout(r, 100));
+    lastT = -1; for (const [frame, t, st] of log){ now = frame/fps; update(t, st); }
+    return real.startRendering();
+  }
+  return { update: (t, st) => { if (!offline) update(t, st); }, setFire, setCues, fadeOut, renderOffline, play: (...a) => ctx && on && play(...a), thump: (w, v) => ctx && on && thump(w, v), squelch: w => ctx && on && squelch(w), burst: (...a) => ctx && on && burst(...a), blip: (...a) => ctx && on && blip(...a), get on(){ return on; } };
 })();
 
 /* ---------- the portal: Blu's approved vortex footage with his Spirit Strikers riding it, the mark, then a white release into space ----------

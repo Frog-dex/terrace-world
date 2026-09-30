@@ -1,7 +1,7 @@
 // Prepared by: Codex. All visible mechanism parts share this scene and light rig.
 // The original SVG stays usable until this renderer and its artwork are ready.
 import * as THREE from '../../store-book/assets/three.module.js';
-import { createTownEnvironment } from './town-environment.js?v=9';
+import { createTownEnvironment } from './town-environment.js?v=11';
 import { createTownTraffic } from './town-traffic.js?v=9';
 import { createTownSky } from './town-sky.js?v=11b';
 import { createTownLoop } from './town-loop.js?v=school-life-11';
@@ -58,6 +58,8 @@ if(embeddedMenu){
     if(event.source!==parent||event.origin!==location.origin)return;
     if(event.data?.type==='spirit-menu-visibility'&&typeof event.data.visible==='boolean'){
       parentVisible=event.data.visible;needsRender=true;run();
+    }else if(event.data?.type==='spirit-menu-arrival'){
+      cinema.arrive();needsRender=true;run();
     }else if(event.data?.type==='spirit-menu-view'&&['sign','school'].includes(event.data.view)){
       mobileStreetView=event.data.view;resize();
     }else if(event.data?.type==='spirit-menu-motion'&&typeof event.data.enabled==='boolean'){
@@ -236,6 +238,8 @@ function makeMountAndMotor(copper,dark,logo){
 }
 const seams=[[78.5,.00285],[130,.00255],[183,.00305],[235,.004]];
 function makeSchoolSign(){
+  // The school's name now stands on the lawn as a brick monument sign (school-district.js); the old wall plate is retired.
+  if(environment.district)return;
   // A provisional entrance nameplate, not a fabricated school crest.
   const canvas=document.createElement('canvas');canvas.width=1024;canvas.height=224;
   const c=canvas.getContext('2d');c.fillStyle='#d2c3a4';c.fillRect(0,0,1024,224);
@@ -421,7 +425,7 @@ function resize(){
 }
 function idleAllowed(){return !reduced.matches||manualIdle||autoControl.checked;}
 function scenePlaying(){return townControl.checked&&sceneMotion.checked;}
-function animationWanted(){return scenePlaying()||active||idleAllowed();}
+function animationWanted(){return scenePlaying()||active||idleAllowed()||cinema.busy();}
 function selectPlanet(type){
   kind=type;globeMaterial.map=textures.get(type);togaOnly.value=type==='toga'?1:0;globeMaterial.needsUpdate=true;menu.dataset.globe=type;
 }
@@ -528,6 +532,7 @@ function updateProximity(){
   if(hoverMenu&&autoControl.checked&&!paused)returnToMenu();
 }
 function advance(dt){
+  cinema.update(dt);
   if(scenePlaying()){worldTime+=dt;traffic?.update(worldTime);}
   if(returnMotion){
     returnMotion.time+=dt;globeTime+=dt;
@@ -601,8 +606,9 @@ window.SIDEBAR_STUDY={
     portalReady:!!portalTexture,portalTime:portalVideo?.currentTime,portalSeeking:portalVideo?.seeking,portalPaused:portalVideo?.paused,portalPlaybackError,portalLogoOpacity:portalLogo?.material.opacity,reflections:reflections?.getState(),
     town:townControl.checked,hiddenSign:hideControl.checked,driveDistance,rotation:globe?.rotation.y,bandAngles:bands.map(b=>b.rotation.y),
     gears:rotors.map(r=>r.object.rotation.z),windmill:fan?.rotation.z,rearWindmill:rearFan?.rotation.z,motorY:motorMount?.position.y,motorScale:motorMount?.scale.toArray(),
-    settings:{...settings},autoCycle:autoControl.checked,schedule:schedule(),rendering:!!raf,width:menu.getBoundingClientRect().width,signBounds,traffic:traffic?.getState(),environment:environment?.getState(),
+    settings:{...settings},autoCycle:autoControl.checked,cinema:cinema.getState(),schedule:schedule(),rendering:!!raf,width:menu.getBoundingClientRect().width,signBounds,traffic:traffic?.getState(),environment:environment?.getState(),
     camera:camera?.isPerspectiveCamera?{position:camera.position.toArray(),matrix:camera.matrixWorld.toArray(),projection:camera.projectionMatrix.toArray(),aspect:camera.aspect,view:camera.view?{...camera.view}:null}:null,sky:sky?.getState(),film:townFilm?.getState(),footing:footing?.getState(),sceneMotion:sceneMotion.checked,embeddedMenu,parentVisible,backdrop:backdropControl.value,attachment:embeddedMenu?'native-town-v13':'school-life-v11'}),
+  cinema:{shots:()=>cinema.SHOTS,still:(n,u)=>cinema.still(n,u),tour:()=>{cinema.tour();run();},release:()=>cinema.release(),arrive:()=>{cinema.arrive();run();}},
   capture:({hideSign=false,hideTraffic=false,greenSky=false,width=1800,height=1200}={})=>{
     const size=renderer.getSize(new THREE.Vector2()),ratio=renderer.getPixelRatio();
     const background=scene.background,trafficVisible=traffic.group.visible;
@@ -618,5 +624,82 @@ window.SIDEBAR_STUDY={
     }
   }
 };
+/* ---------- the menu at rest: little tours of the town when nobody's touching it, and the arrival from the intro ----------
+   After a while idle, the view fades across a few places in the town (the school's front, the factory, the airfield, the water tower
+   with something hovering beside it, the kid's house), then comes back to the sign. Any touch, click or key brings it straight back. */
+const cinema=(()=>{
+  // [camera from, camera to, look from, look to]: source units (x east, y south) and height above the ground
+  const SHOTS={
+    school:[[508,358,2.2],[503.5,352.8,2.5],[494,339,4.4],[492.5,337.5,4.1]],
+    factory:[[340,548,5],[334,552,5.5],[287,522,11],[286,522,10.5]],
+    airport:[[154,300,2.0],[156,303.5,2.4],[150,326,2.4],[150.5,326,2.3]],
+    ufo:[[782,238,8],[775,242,8.5],[814,176,33],[814,174,38]],
+    home:[[534,476,1.8],[536,473,2.0],[541,455,3.4],[541,455,3.2]]
+  };
+  const TOUR=['school','factory','airport','ufo','home'],SHOT_LEN=6.4,IDLE_START=22;
+  let mode=null,shot=null,t=0,idle=0,index=0,base=null,fade=null,ufo=null,pending=null,fadeT=0;
+  const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+  const at=(p)=>{const h=environment.terrainHeight(p[0],p[1]);return environment.toWorld([p[0],p[1],h+p[2]]);};
+  function fadeTo(v){if(!fade){fade=document.createElement('div');Object.assign(fade.style,{position:'fixed',inset:'0',background:'#000',opacity:'0',pointerEvents:'none',transition:'opacity .45s ease',zIndex:'40'});document.body.appendChild(fade);}fade.style.opacity=String(v);}
+  function saveBase(){if(!base&&townCamera)base={p:townCamera.position.clone(),q:townCamera.quaternion.clone(),fov:townCamera.fov};townCamera.clearViewOffset();const sz=renderer.getSize(new THREE.Vector2());townCamera.aspect=sz.x/Math.max(1,sz.y);menu.style.pointerEvents='none';}
+  function restore(){if(!base)return;townCamera.position.copy(base.p);townCamera.quaternion.copy(base.q);townCamera.fov=base.fov;townCamera.updateMatrixWorld(true);base=null;if(ufo)ufo.visible=false;
+    menu.style.pointerEvents=hideControl.checked?'none':'';resize();}
+  // a tall phone screen keeps the same shot by opening the lens until the width fits
+  const lens=v=>{const a=townCamera.aspect,h=2*Math.atan(Math.tan(v*Math.PI/360)*Math.max(a,.8));return Math.max(v,2*Math.atan(Math.tan(h/2)/a)*180/Math.PI);};
+  function place(name,u){const S=SHOTS[name],e=u*u*(3-2*u)*.6+u*.4;townCamera.position.copy(at(S[0]).lerp(at(S[1]),e));townCamera.lookAt(at(S[2]).lerp(at(S[3]),e));townCamera.fov=lens(name==='school'?44:48);townCamera.updateProjectionMatrix();townCamera.updateMatrixWorld(true);}
+  function makeUfo(){
+    const g=new THREE.Group(),prof=[[0,-6],[16,-5],[30,-1.5],[34,0],[30,2.2],[18,5],[10,6.5],[0,7]].map(([x,y])=>new THREE.Vector2(x,y));
+    g.add(new THREE.Mesh(new THREE.LatheGeometry(prof,40),new THREE.MeshStandardMaterial({color:0xd4dade,metalness:.25,roughness:.35,emissive:0x2a3036})));
+    const dome=new THREE.Mesh(new THREE.SphereGeometry(11,24,12,0,Math.PI*2,0,Math.PI/2),new THREE.MeshStandardMaterial({color:0x9fe3f0,emissive:0x5fb8c8,emissiveIntensity:.8,roughness:.2}));dome.position.y=5.5;g.add(dome);
+    g.userData.lights=[];for(let k=0;k<12;k++){const a=k/12*Math.PI*2,m=new THREE.Mesh(new THREE.SphereGeometry(1.6,8,6),new THREE.MeshBasicMaterial({color:k%2?0xffd86a:0x8ff0c8}));m.position.set(Math.cos(a)*31,.6,Math.sin(a)*31);g.add(m);g.userData.lights.push(m);}
+    g.scale.setScalar(.16);g.visible=false;scene.add(g);return g;
+  }
+  function startShot(name){shot=name;t=0;if(name==='ufo'){ufo||(ufo=makeUfo());ufo.visible=true;}else if(ufo)ufo.visible=false;}
+  function stop(){if(!mode)return;pending=null;fadeTo(1);mode='leaving';fadeT=0;}
+  function userActive(){idle=0;if(mode==='tour'||mode==='arrival')stop();}
+  for(const type of ['pointerdown','keydown','wheel','touchstart'])addEventListener(type,userActive,{passive:true});
+  addEventListener('pointermove',e=>{if(Math.abs(e.movementX)+Math.abs(e.movementY)>2)userActive();},{passive:true});
+  return {
+    busy:()=>!!mode||(!reducedMotion.matches&&idleAllowed()),
+    arrive(){if(!townCamera||!environment)return;saveBase();mode='arrival';startShot('school');t=0;place('school',0);needsRender=true;},
+    update(dt){
+      if(!townCamera||!environment||!townControl.checked)return;
+      dt=Math.min(dt,.05);   // a slow frame never skips a shot
+      if(mode==='arrival'){
+        t+=dt;
+        const HOLD=4.6,GLIDE=2.4;
+        if(t<HOLD)place('school',Math.min(1,t/7));
+        else{ // glide from the school's front back to the sign
+          const u=Math.min(1,(t-HOLD)/GLIDE),e=u*u*u*(u*(u*6-15)+10),S=SHOTS.school,u0=HOLD/7,k=u0*u0*(3-2*u0)*.6+u0*.4,from=at(S[0]).lerp(at(S[1]),k),look=at(S[2]).lerp(at(S[3]),k);
+          const bl=new THREE.Vector3(0,0,-1).applyQuaternion(base.q).multiplyScalar(40).add(base.p),f0=lens(44);
+          townCamera.position.copy(from.lerp(base.p,e));townCamera.lookAt(look.lerp(bl,e));townCamera.fov=f0+(base.fov-f0)*e;townCamera.updateProjectionMatrix();townCamera.updateMatrixWorld(true);
+          if(u>=1){mode=null;shot=null;restore();idle=0;}
+        }
+        needsRender=true;return;
+      }
+      if(mode==='leaving'){fadeT+=dt;if(fadeT>.5){restore();mode=null;shot=null;idle=0;fadeTo(0);}needsRender=true;return;}
+      if(mode==='still'){needsRender=true;return;}
+      if(mode==='tour'){
+        t+=dt;
+        if(pending){fadeT+=dt;if(fadeT>.5){startShot(pending);pending=null;fadeTo(0);}}
+        else if(t>SHOT_LEN-.5&&t<SHOT_LEN){ /* about to change: fade out */ if(fade?.style.opacity!=='1')fadeTo(1);}
+        else if(t>=SHOT_LEN){index++;if(index>=TOUR.length){mode='leaving';fadeT=.5;return;}pending=TOUR[index];fadeT=.5;t=0;}
+        if(shot){place(shot,Math.min(1,t/SHOT_LEN));
+          if(shot==='ufo'&&ufo){const u=t/SHOT_LEN,zip=Math.max(0,(u-.72)/.28),p=at([806+zip*zip*80,168-zip*zip*60,40+Math.sin(t*1.6)*1.2+zip*zip*140]);ufo.position.copy(p);ufo.rotation.y=t*1.5;ufo.userData.lights.forEach((m,k)=>m.material.color.set(Math.floor(t*6+k)%3===0?0xffd86a:0x8ff0c8));}}
+        needsRender=true;return;
+      }
+      // idle: nobody has touched anything for a while (the sign's own turning doesn't count)
+      if(reducedMotion.matches||hoverMenu||!ready||!visibleFrame()){idle=0;return;}
+      idle+=dt;
+      if(idle>IDLE_START){saveBase();mode='tour';index=0;t=0;shot=null;pending=TOUR[0];fadeT=0;fadeTo(1);}
+    },
+    SHOTS,getState:()=>({mode,shot,idle,t}),
+    // for checking the framing: hold one shot at a point along its move
+    still(name,u=.5){if(!SHOTS[name])return;saveBase();mode='still';startShot(name);place(name,u);
+      if(name==='ufo'&&ufo){ufo.position.copy(at([806,168,40]));}needsRender=true;run();},
+    tour(){idle=IDLE_START+1;},
+    release(){if(mode==='still'){mode=null;shot=null;restore();needsRender=true;run();}}
+  };
+})();
 earthButton.disabled=togaButton.disabled=true;
 prepare().catch(e=>{console.error(e);fallback('The 3D mechanism could not load. Original menu links remain available.');});

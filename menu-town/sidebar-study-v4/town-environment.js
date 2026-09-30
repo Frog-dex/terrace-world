@@ -2,9 +2,10 @@
  * Isolated, read-only adapter for the existing saved TOGA town. No editor,
  * persistence, replacement buildings, camera, or animation loop is installed.
  */
-import { createTownPerspective } from '../../intro-town-perspective.js?v=terrain-flat-v4';
+import { createTownPerspective } from '../../intro-town-perspective.js?v=omit-school-1';
 import { createRegionalRelief } from '../../intro-nevada-relief.js?v=complete-regional-v5';
 import { createRegionalRoads } from '../../intro-regional-roads.js?v=terrain-flat-v4';
+import { createSchoolDistrict } from './school-district.js?v=2';
 
 const SOURCE = new URL('../../assets/intro-nevada-v1/school-source/', import.meta.url);
 const CLASSIC_MODULES = [
@@ -87,7 +88,7 @@ export async function createTownEnvironment(THREE, scene) {
   const group = new THREE.Group();
   group.name = 'Original TOGA town environment, source units, Y-up registration';
   group.rotation.x = -Math.PI / 2;
-  let town, relief, roads, disposed = false;
+  let town, relief, roads, district, disposed = false;
 
   const dispose = () => {
     if (disposed) return;
@@ -96,12 +97,15 @@ export async function createTownEnvironment(THREE, scene) {
     roads?.dispose();
     relief?.dispose();
     town?.dispose();
+    district?.dispose();
     group.clear();
   };
 
   try {
-    town = createTownPerspective(THREE, world);
+    // The long reference-school block is replaced by the opening's school district (same place, the kit at its own proportions).
+    town = createTownPerspective(THREE, world, { omit: ['building-029'] });
     group.add(town.group);
+    district = await createSchoolDistrict(THREE, group);
     // Existing real-relief adapter fills the source terrain's edge feather and
     // provides the distant horizon for a street-height, slightly upward view.
     relief = await createRegionalRelief(THREE, { center: [512, 384], metresPerUnit: 2 });
@@ -113,6 +117,8 @@ export async function createTownEnvironment(THREE, scene) {
     };
     roads = createRegionalRoads(THREE, { world, metresPerUnit: 2, sampleSurface: terrainHeight });
     group.add(roads.group);
+    // the Blackbird-inspired jet parked on the airfield apron (the source's own model and placement)
+    if (world.aircraft && globalThis.TogaBlackbird?.faces) district.addAircraft(globalThis.TogaBlackbird, world.aircraft, terrainHeight(world.aircraft.x, world.aircraft.y));
 
     const school = town.school;
     const sourcePoint = (x, y, z = 0) => world.geometry.point(school, [school.x + x, school.y + y, z]);
@@ -170,6 +176,7 @@ export async function createTownEnvironment(THREE, scene) {
       const light = town.updateLighting(hour);
       relief.updateLighting(hour, light.groundLinear);
       roads.updateLighting(light.groundLinear);
+      district?.setLight(light.groundLinear);
       return light;
     }
     updateLighting(16);
@@ -177,7 +184,7 @@ export async function createTownEnvironment(THREE, scene) {
     group.updateWorldMatrix(true, true);
     return {
       group, town, world, school, schoolBounds, relief, roads, anchors,
-      terrainHeight, toWorld, toSource, updateLighting, dispose,
+      terrainHeight, toWorld, toSource, updateLighting, dispose, district,
       getState() {
         const box = schoolBounds.world;
         return {

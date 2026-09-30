@@ -17,6 +17,36 @@
   let signMotionEnabled=false;
   let streetView='sign';
   let sceneReady = false;
+  // Arriving from the intro: the TV is still on static; when the town is ready the picture opens like an iris onto the school.
+  const fromIntro = new URLSearchParams(location.search).get('from') === 'intro';
+  const arrival = (() => {
+    let cv = null, raf = 0, phase = 'off', t0 = 0, openAt = 0;
+    const rm = matchMedia('(prefers-reduced-motion: reduce)');
+    function start(){
+      if (cv) return; cv = document.createElement('canvas'); cv.setAttribute('aria-hidden', 'true');
+      Object.assign(cv.style, { position:'fixed', inset:'0', width:'100%', height:'100%', zIndex:'1000', pointerEvents:'none' }); document.body.appendChild(cv);
+      phase = 'static'; t0 = performance.now(); raf = requestAnimationFrame(draw);
+      setTimeout(() => { if (phase === 'static') open(); }, 15000);           // never hold the menu hostage to a slow load
+    }
+    const noise = document.createElement('canvas'); noise.width = 192; noise.height = 108; const nx = noise.getContext('2d'), img = nx.createImageData(192, 108);
+    function draw(now){
+      const w = cv.width = Math.round(innerWidth*Math.min(2, devicePixelRatio || 1)/2), h = cv.height = Math.round(innerHeight*Math.min(2, devicePixelRatio || 1)/2), g = cv.getContext('2d');
+      for (let i = 0; i < img.data.length; i += 4){ const v = Math.random()*255*(0.75 + 0.25*Math.sin(i*0.0007 + now*0.02)); img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255; }
+      nx.putImageData(img, 0, 0); g.imageSmoothingEnabled = false; g.globalAlpha = 1; g.drawImage(noise, 0, 0, w, h);
+      g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(0, 0, w, h);
+      if (phase === 'open'){
+        const u = Math.min(1, (now - openAt)/1300), e = 1 - Math.pow(1 - u, 3), R = e*Math.hypot(w, h)*0.56, cx = w/2, cy = h*0.46;
+        g.save(); g.globalCompositeOperation = 'destination-out'; g.beginPath(); g.arc(cx, cy, Math.max(0.1, R), 0, Math.PI*2); g.fill(); g.restore();
+        if (R > 1){ g.lineWidth = Math.max(2, h*0.012); g.strokeStyle = '#1d2433'; g.beginPath(); g.arc(cx, cy, R + g.lineWidth*0.9, 0, Math.PI*2); g.stroke();
+          g.lineWidth = Math.max(1.5, h*0.006); g.strokeStyle = '#d8b348'; g.beginPath(); g.arc(cx, cy, R + g.lineWidth*0.5, 0, Math.PI*2); g.stroke(); }
+        if (u >= 1){ cv.remove(); cv = null; phase = 'off'; return; }
+      }
+      raf = requestAnimationFrame(draw);
+    }
+    function open(){ if (!cv) return; if (phase !== 'open'){ phase = 'open'; openAt = performance.now(); } if (rm.matches){ cv.remove(); cv = null; phase = 'off'; } }
+    return { start, open, again(){ start(); setTimeout(open, 650); } };
+  })();
+  if (fromIntro){ arrival.start(); history.replaceState(null, '', location.pathname); }
   function syncMotionControl(){
     motionButton.hidden=!sceneReady||!reducedMotion.matches;
     motionButton.textContent=signMotionEnabled?'Stop sign loop':'Animate sign';
@@ -163,6 +193,7 @@
         syncSceneVisibility();
         syncMotionControl();
         if(reducedMotion.matches)sendMotionChoice();
+        if(fromIntro){ sceneFrame.contentWindow?.postMessage({type:'spirit-menu-arrival'},location.origin); arrival.open(); }
       }else if(event.data?.type==='spirit-menu-select'){
         const link=links.find(item=>item.dataset.destination===event.data.destination);
         if(link)openPage(link);
@@ -170,7 +201,10 @@
       return;
     }
     if (event.source !== frame.contentWindow || event.origin !== location.origin) return;
-    if (event.data && event.data.type === 'spirit-strikers-close') closePage();
+    if (event.data && event.data.type === 'spirit-strikers-close'){
+      const wasIntro = dialog.dataset.destination === 'intro'; closePage();
+      if (wasIntro && sceneReady){ arrival.again(); sceneFrame.contentWindow?.postMessage({type:'spirit-menu-arrival'},location.origin); }   // the replayed intro hands back the same way
+    }
   });
   contentFrame.addEventListener('load', () => {
     if(frame!==contentFrame)return;

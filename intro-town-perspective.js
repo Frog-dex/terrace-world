@@ -105,7 +105,9 @@ export function createTownPerspective(THREE, world, options = {}) {
   }
 
   const airportRoles = { hangar: 'hangar', 'building-084': 'hangar', 'building-085': 'hangar', 'building-083': 'workshop', 'building-001': 'operations', 'building-002': 'workshop', 'building-003': 'operations' };
+  const omit = new Set(options.omit || []);          // buildings drawn elsewhere (the menu draws the school district itself)
   for (const [buildingIndex, b] of world.buildings.entries()) {
+    if (omit.has(b.id)) continue;
     if (Civil.role(b)) {
       const mesh = Civil.make(b, world.buildingProfile(b));
       for (const f of mesh.faces) face(f.points.map(p => worldPoint(b, p)), f.color, f.dayColor || f.color, f.glow, b.id);

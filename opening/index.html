@@ -714,7 +714,7 @@ function part(parent, geo, mat, { x=0, y=0, z=0, rx=0, ry=0, rz=0, s=1, ink=0.03
 const inkLines0 = new THREE.LineBasicMaterial({ color:INK, transparent:true, opacity:0.9 });
 
 /* ---------- the CRT set: power on and off, snow, sync jitter, a rolling bar, the cloud deck, and the glass ---------- */
-const rt = new THREE.WebGLRenderTarget(4, 4, { minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter });
+const rt = new THREE.WebGLRenderTarget(4, 4, { minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, stencilBuffer:true });   // with a stencil, three gives it a 24-bit depth buffer (16-bit made far planets fight their own outlines)
 const capCanvas = document.createElement('canvas'); capCanvas.width = 1600; capCanvas.height = 900;
 const capCtx = capCanvas.getContext('2d'), capTex = new THREE.CanvasTexture(capCanvas); capTex.minFilter = capTex.magFilter = THREE.LinearFilter; capTex.generateMipmaps = false;
 const postU = { tScene:{ value: rt.texture }, tCap:{ value: capTex }, uRes:{ value: new THREE.Vector2(1, 1) }, uTime:{ value: 0 },
@@ -1296,126 +1296,293 @@ function schoolDistrict(){
   BASE = 0;
 }
 
-/* ======================= space: the stars, a toon solar system, and an illustrated Earth ======================= */
+/* ======================= the solar kit: the Sun, toon planets, Saturn's rings, the Earth, orbits, stars =======================
+   Shared by the opening and the solar system page. Everything is painted in the shader from the planet's own sphere
+   (no texture seams, nothing that can fail to load except the Earth's map), lit by the Sun wherever it sits:
+   three painted light bands, a warm terminator, and a night side that keeps its colours, cooled and dimmed,
+   with a thin rim so no planet ever reads as a black hole. An ink hull outlines each body. */
+const SolarKit = (() => {
+  const NOISE = `
+    float h3(vec3 p){ p = fract(p*0.3183099 + 0.1); p *= 17.0; return fract(p.x*p.y*p.z*(p.x + p.y + p.z)); }
+    float n3(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0 - 2.0*f);
+      return mix(mix(mix(h3(i), h3(i + vec3(1,0,0)), f.x), mix(h3(i + vec3(0,1,0)), h3(i + vec3(1,1,0)), f.x), f.y),
+                 mix(mix(h3(i + vec3(0,0,1)), h3(i + vec3(1,0,1)), f.x), mix(h3(i + vec3(0,1,1)), h3(i + vec3(1,1,1)), f.x), f.y), f.z); }
+    float fbm3(vec3 p){ return n3(p)*0.5 + n3(p*2.03 + 1.7)*0.27 + n3(p*4.1 - 2.3)*0.15 + n3(p*8.3 + 5.1)*0.08; }
+    // craters: nearest cell centre on a 3D grid
+    vec2 cells(vec3 p){ vec3 i = floor(p), f = fract(p); float d1 = 8.0, id = 0.0;
+      for (int x = -1; x <= 1; x++) for (int y = -1; y <= 1; y++) for (int z = -1; z <= 1; z++){ vec3 g = vec3(float(x), float(y), float(z));
+        vec3 o = vec3(h3(i + g), h3(i + g + 11.3), h3(i + g + 27.1)); float d = length(g + o - f); if (d < d1){ d1 = d; id = h3(i + g + 5.7); } }
+      return vec2(d1, id); }`;
+  // light: three painted bands, a warm line at the terminator, and a cool, readable night side
+  const LIGHT = `
+    vec3 toonLight(vec3 base, float nl, float rim){
+      float b = nl > 0.42 ? 1.0 : nl > 0.12 ? 0.84 : nl > -0.06 ? 0.62 : 0.0;
+      vec3 night = base*vec3(0.2, 0.23, 0.33) + vec3(0.012, 0.018, 0.045);
+      vec3 c = b > 0.0 ? base*b : night;
+      c += vec3(1.0, 0.55, 0.25)*0.16*exp(-pow((nl + 0.02)/0.07, 2.0));
+      c += vec3(0.35, 0.5, 0.85)*0.22*rim*(1.0 - step(0.0, nl));            // a cool rim keeps the night-side silhouette
+      return c; }`;
+  const VERT = `varying vec3 vObj, vN, vW; void main(){ vObj = position; vN = normalize(mat3(modelMatrix)*normal); vW = (modelMatrix*vec4(position, 1.0)).xyz; gl_Position = projectionMatrix*viewMatrix*vec4(vW, 1.0); }`;
+  const hex = c => new THREE.Color(c);
+  let KEY_TO_VIEW = 0.42;                  // 0 = lit strictly from the Sun; more = the key light swings toward the viewer
+  // painted looks: kind 0 banded gas giant, 1 rock, 2 ice giant, 3 cloud-wrapped (Venus)
+  const LOOKS = {
+    mercury: { kind: 1, pal: ['#a39a8f', '#7f776e', '#c2b9ad', '#8e867c', '#b3aa9e', '#6f685f'], crater: 1.0, patch: 0.55, caps: 0 },
+    moon:    { kind: 1, pal: ['#c4c2bb', '#8e8c86', '#dcdad3', '#a7a59f', '#cfcdc6', '#7d7b76'], crater: 0.9, patch: 0.75, caps: 0 },
+    mars:    { kind: 1, pal: ['#c86c43', '#9a4a2d', '#df9265', '#b3593a', '#d67d52', '#83402a'], crater: 0.35, patch: 0.8, caps: 1 },
+    venus:   { kind: 3, pal: ['#f0dcae', '#e3c68c', '#d6b477', '#f6e8c8', '#e9d09c', '#caa468'] },
+    jupiter: { kind: 0, pal: ['#f1e6cf', '#d9b68d', '#b9845a', '#e9d8b6', '#a8734f', '#f5ecdb'], freq: 9.0, turb: 0.55, spot: [-0.36, 1.2, 0.2, 0.1], spotC: '#c0583c' },
+    saturn:  { kind: 0, pal: ['#efe2bf', '#e1c996', '#d1b27c', '#e9d7aa', '#c7a770', '#f3e8cb'], freq: 7.0, turb: 0.25 },
+    uranus:  { kind: 2, pal: ['#a7dde0', '#98d0d5', '#b7e6e6', '#9fd6da', '#c3ecec', '#90c9cf'], freq: 5.0, turb: 0.12 },
+    neptune: { kind: 2, pal: ['#4f7fd6', '#3f6bc2', '#6a93e0', '#4776cc', '#5d89da', '#3560b5'], freq: 6.0, turb: 0.3, spot: [-0.35, 0.6, 0.16, 0.08], spotC: '#27468f' }
+  };
+  function planetMaterial(name, extraU = {}){
+    const L = LOOKS[name] || LOOKS.mercury;
+    const u = Object.assign({ uSun: { value: new THREE.Vector3() }, uSpin: { value: 0 }, uView: { value: KEY_TO_VIEW }, uPal: { value: L.pal.map(hex) },
+      uKind: { value: L.kind }, uFreq: { value: L.freq || 6 }, uTurb: { value: L.turb || 0.3 }, uCrater: { value: L.crater || 0 }, uPatch: { value: L.patch || 0.5 },
+      uCaps: { value: L.caps || 0 }, uSpot: { value: new THREE.Vector4(...(L.spot || [0, 0, 0, 0])) }, uSpotC: { value: hex(L.spotC || '#000000') },
+      uSeed: { value: (name.length*13.7) % 9 } }, extraU);
+    return new THREE.ShaderMaterial({ uniforms: u, vertexShader: VERT, fragmentShader: `
+      uniform vec3 uSun, uPal[6], uSpotC; uniform float uSpin, uKind, uFreq, uTurb, uCrater, uPatch, uCaps, uSeed, uView; uniform vec4 uSpot;
+      varying vec3 vObj, vN, vW;` + NOISE + LIGHT + `
+      vec3 pal(float k){ vec3 c = uPal[0]; int i = int(mod(k, 6.0));
+        for (int j = 0; j < 6; j++) if (j == i) c = uPal[j]; return c; }
+      void main(){
+        vec3 p = normalize(vObj); float cs = cos(uSpin), sn = sin(uSpin); p = vec3(cs*p.x + sn*p.z, p.y, -sn*p.x + cs*p.z);
+        float lat = asin(clamp(p.y, -1.0, 1.0)), lon = atan(p.z, p.x);
+        vec3 q = p*2.2 + uSeed;
+        vec3 base;
+        if (uKind < 0.5 || (uKind > 1.5 && uKind < 2.5)){
+          // bands, pulled about by the wind; a storm or two
+          float w = fbm3(q*1.6)*uTurb + 0.18*uTurb*sin(lon*4.0 + lat*14.0 + fbm3(q*3.0)*3.0);
+          float v = (lat/1.5708*0.5 + 0.5)*uFreq + w;
+          float k = floor(v + h3(vec3(floor(v))*1.7)*0.35);
+          base = pal(k + floor(h3(vec3(k, 2.0, 7.0))*3.0));
+          float fine = n3(vec3(lon*3.0, lat*40.0, 0.0) + q*0.5);                // fine streaks inside each band
+          base *= 0.95 + 0.1*step(0.55, fine);
+          if (uSpot.z > 0.0){ vec2 d = vec2((lon - uSpot.y)/uSpot.z, (lat - uSpot.x)/uSpot.w); float r = length(d);
+            base = mix(base, uSpotC, smoothstep(1.0, 0.86, r)); base = mix(base, uSpotC*1.18, smoothstep(0.55, 0.35, r)); base = mix(base, base*0.8, smoothstep(0.08, 0.0, abs(r - 1.0))); }
+          if (uKind > 1.5) base = mix(base, uPal[4], 0.25*smoothstep(0.55, 0.95, abs(p.y)));   // ice giants: a pale haze at the poles
+        } else if (uKind < 1.5){
+          // rock: broad painted patches in three tones, craters with a dark rim and a light floor, polar caps
+          float n = fbm3(q*1.3);
+          base = n < 0.42 ? uPal[1] : n < 0.58 ? uPal[0] : uPal[2];
+          float n2 = fbm3(q*3.1 + 4.0); base = mix(base, n2 > 0.6 ? uPal[3] : base, uPatch*step(0.6, n2));
+          for (int s = 0; s < 2; s++){ float sc = s == 0 ? 3.0 : 7.5; vec2 c = cells(p*sc + uSeed + float(s)*9.0);
+            float rad = 0.18 + 0.2*c.y, on = step(0.55, c.y)*uCrater;
+            float rim = smoothstep(rad + 0.05, rad, c.x) - smoothstep(rad, rad - 0.07, c.x), floorC = smoothstep(rad - 0.02, rad - 0.1, c.x);
+            base = mix(base, uPal[5], rim*0.8*on); base = mix(base, uPal[4], floorC*0.5*on); }
+          if (uCaps > 0.0){ float cap = smoothstep(0.86, 0.9, abs(p.y) + 0.04*n); base = mix(base, vec3(0.95, 0.94, 0.9), cap); }
+        } else {
+          // cloud-wrapped: slow swirls in soft bands
+          float w = fbm3(q*1.4 + vec3(0.0, 0.0, lon*0.2));
+          float v = lat*3.0 + w*2.2 + 0.4*sin(lon*2.0 + w*5.0);
+          float k = floor(v*1.6); base = pal(k); base = mix(base, uPal[3], 0.25*step(0.62, fbm3(q*4.0)));
+        }
+        vec3 n = normalize(vN), v = normalize(cameraPosition - vW), l = normalize(mix(normalize(uSun - vW), v, uView));   // the key leans toward the viewer: every planet reads
+        float nl = dot(n, l), rim = pow(1.0 - max(dot(n, v), 0.0), 3.0);
+        gl_FragColor = vec4(toonLight(base, nl, rim), 1.0);
+      }` });
+  }
+  // the ink hull: the back faces, pushed out along the normals and drawn dark
+  const inkCache = {};
+  function inkHull(geo, width, color = 0x0b0f1c){
+    const key = width.toFixed(4) + ':' + color;
+    const m = inkCache[key] || (inkCache[key] = (() => { const mm = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide });
+      mm.onBeforeCompile = sh => { sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n transformed += normalize(normal)*' + width.toFixed(4) + ';'); };
+      mm.customProgramCacheKey = () => 'sk-ink' + key; return mm; })());
+    return new THREE.Mesh(geo, m);
+  }
+  // Saturn's (and Uranus's faint) rings: painted bands, lit from the Sun, darkened where the planet's shadow falls
+  function makeRings(radius, inner, outer, look = 'saturn'){
+    const geo = new THREE.RingGeometry(radius*inner, radius*outer, 192, 1);
+    const u = { uView: { value: KEY_TO_VIEW }, uSun: { value: new THREE.Vector3() }, uCtr: { value: new THREE.Vector3() }, uR: { value: radius }, uIn: { value: radius*inner }, uOut: { value: radius*outer }, uFaint: { value: look === 'uranus' ? 1 : 0 } };
+    const m = new THREE.ShaderMaterial({ uniforms: u, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+      vertexShader: `varying vec3 vW; varying float vR; void main(){ vR = length(position.xy); vW = (modelMatrix*vec4(position, 1.0)).xyz; gl_Position = projectionMatrix*viewMatrix*vec4(vW, 1.0); }`,
+      fragmentShader: `uniform vec3 uSun, uCtr; uniform float uR, uIn, uOut, uFaint, uView; varying vec3 vW; varying float vR;
+        float h1(float x){ return fract(sin(x*127.1)*43758.5453); }
+        void main(){ float t = (vR - uIn)/(uOut - uIn);
+          float a, b = 0.0; vec3 c;
+          if (uFaint > 0.5){ a = 0.55*step(0.5, fract(t*3.0))*smoothstep(0.0, 0.05, t)*smoothstep(1.0, 0.95, t); c = vec3(0.75, 0.86, 0.88); }
+          else {
+            float k = floor(t*28.0), band = 0.55 + 0.45*h1(k);
+            a = mix(0.45, 0.95, band)*smoothstep(0.0, 0.04, t)*smoothstep(1.0, 0.96, t);
+            a *= 1.0 - 0.92*smoothstep(0.012, 0.0, abs(t - 0.62) - 0.02);        // Cassini division
+            c = mix(vec3(0.79, 0.7, 0.53), vec3(0.93, 0.86, 0.69), band); c = mix(c, vec3(0.7, 0.62, 0.48), smoothstep(0.62, 1.0, t)*0.5);
+          }
+          // the planet's shadow on the rings: does the line to the Sun pass through the planet?
+          vec3 L = normalize(mix(normalize(uSun - vW), normalize(cameraPosition - vW), uView)), oc = vW - uCtr; float pb = dot(oc, L);
+          float dist = sqrt(max(dot(oc, oc) - pb*pb, 0.0)), shadow = step(pb, 0.0)*smoothstep(uR*1.03, uR*0.93, dist);
+          c *= mix(1.0, 0.35, shadow);
+          gl_FragColor = vec4(c, a); }` });
+    const mesh = new THREE.Mesh(geo, m); mesh.userData.u = u; return mesh;
+  }
+  // a planet: body, ink, and (for Saturn and Uranus) rings; call update(sunWorld, t) each frame
+  function makePlanet(name, radius, { tilt = 0, ink = 0.035, segments = 64 } = {}){
+    const g = new THREE.Group(), tiltG = new THREE.Group(); tiltG.rotation.z = tilt; g.add(tiltG);
+    const geo = new THREE.SphereGeometry(radius, segments, Math.round(segments*0.66)), mat = planetMaterial(name), body = new THREE.Mesh(geo, mat);
+    tiltG.add(body); body.add(inkHull(geo, radius*ink));
+    let rings = null;
+    if (name === 'saturn'){ rings = makeRings(radius, 1.3, 2.3); rings.rotation.x = -Math.PI/2; tiltG.add(rings); }
+    if (name === 'uranus'){ rings = makeRings(radius, 1.5, 1.9, 'uranus'); rings.rotation.x = -Math.PI/2; tiltG.add(rings); }
+    const spinRate = { mercury: 0.05, venus: -0.02, moon: 0.03, mars: 0.25, jupiter: 0.6, saturn: 0.55, uranus: -0.35, neptune: 0.4 }[name] || 0.2;
+    const wp = new THREE.Vector3();
+    function update(sun, t){ mat.uniforms.uSun.value.copy(sun); mat.uniforms.uSpin.value = t*spinRate;
+      if (rings){ g.getWorldPosition(wp); rings.userData.u.uSun.value.copy(sun); rings.userData.u.uCtr.value.copy(wp); } }
+    return { group: g, body, rings, radius, update };
+  }
+  // the Sun: banded toon disc with a boiling surface, and a flame-edged corona with an ink rim
+  function makeSun(R, uT){
+    const g = new THREE.Group();
+    const core = new THREE.Mesh(new THREE.SphereGeometry(R, 64, 40), new THREE.ShaderMaterial({ uniforms: { uT },
+      vertexShader: `varying vec3 vN, vP, vV; void main(){ vN = normalize(normalMatrix*normal); vP = position; vec4 mv = modelViewMatrix*vec4(position, 1.0); vV = normalize(-mv.xyz); gl_Position = projectionMatrix*mv; }`,
+      fragmentShader: `uniform float uT; varying vec3 vN, vP, vV;` + NOISE + `
+        void main(){ float f = dot(normalize(vN), normalize(vV)); vec3 p = vP/` + (R*0.3).toFixed(2) + `;
+          float boil = n3(p + vec3(0.0, uT*0.35, 0.0))*0.6 + n3(p*2.3 - vec3(uT*0.5))*0.4;
+          float k = f + (boil - 0.5)*0.28;
+          vec3 c = k > 0.62 ? vec3(1.0, 0.97, 0.78) : k > 0.38 ? vec3(1.0, 0.86, 0.42) : k > 0.16 ? vec3(1.0, 0.66, 0.24) : vec3(0.93, 0.42, 0.16);
+          float cell = smoothstep(0.62, 0.7, n3(p*3.1 + uT*0.2)); c = mix(c, c*vec3(1.0, 0.9, 0.75), cell*0.35);
+          gl_FragColor = vec4(c*1.12, 1.0); }` }));
+    g.add(core);
+    const corona = new THREE.Mesh(new THREE.PlaneGeometry(R*6, R*6), new THREE.ShaderMaterial({ uniforms: { uT }, transparent: true, depthWrite: false,
+      vertexShader: `varying vec2 vU; void main(){ vU = uv*2.0 - 1.0; vec4 mv = modelViewMatrix*vec4(0.0, 0.0, 0.0, 1.0); mv.xy += position.xy; gl_Position = projectionMatrix*mv; }`,
+      fragmentShader: `uniform float uT; varying vec2 vU;
+        float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233)))*43758.5453); }
+        float vn(vec2 p){ vec2 i = floor(p), f = fract(p), u = f*f*(3.0-2.0*f); return mix(mix(h(i), h(i+vec2(1,0)), u.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), u.x), u.y); }
+        void main(){ float r = length(vU)*3.0, a = atan(vU.y, vU.x);
+          float fl = 1.0 + 0.16*vn(vec2(a*5.0, uT*0.9)) + 0.1*vn(vec2(a*13.0 + 3.0, uT*1.7)) + 0.05*sin(a*23.0 + uT*2.0);
+          float inside = step(r, fl), rim = smoothstep(fl - 0.035, fl - 0.012, r)*inside;
+          vec3 c = mix(vec3(1.0, 0.58, 0.18), vec3(1.0, 0.8, 0.35), smoothstep(fl, 1.0, r));
+          float glow = exp(-(r - 1.0)*2.2)*0.55*step(1.0, r);
+          float ray = pow(max(0.0, sin(a*9.0 + uT*0.25)), 18.0)*exp(-(r - 1.0)*1.3)*0.25;
+          vec4 o = vec4(c, inside*step(0.98, r));
+          o.rgb = mix(o.rgb, vec3(0.45, 0.16, 0.06), rim);
+          o = mix(vec4(vec3(1.0, 0.75, 0.4)*(glow + ray), glow + ray), o, o.a);
+          gl_FragColor = o; }` }));
+    corona.renderOrder = 2; g.add(corona);
+    return { group: g, core, corona };
+  }
+  // an orbit: a dashed line that fades out close to the camera (so it never slices across the view in big dashes)
+  function orbitLine(points, color = 0x8a9bc6, opacity = 0.34, dash = 1){
+    const pos = [], along = []; let s = 0;
+    points.forEach((p, i) => { if (i) s += p.distanceTo(points[i - 1]); pos.push(p.x, p.y, p.z); along.push(s); });
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('along', new THREE.Float32BufferAttribute(along, 1));
+    const m = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, uniforms: { uC: { value: new THREE.Color(color) }, uA: { value: opacity }, uDash: { value: s/(160*dash) }, uNear: { value: 1 } },
+      vertexShader: `attribute float along; uniform float uDash; varying float vS, vD; void main(){ vS = along/uDash; vec4 mv = modelViewMatrix*vec4(position, 1.0); vD = -mv.z; gl_Position = projectionMatrix*mv; }`,
+      fragmentShader: `uniform vec3 uC; uniform float uA, uNear; varying float vS, vD; void main(){ if (fract(vS) > 0.58) discard; gl_FragColor = vec4(uC, uA*smoothstep(uNear*0.4, uNear, vD)); }` });
+    const line = new THREE.Line(g, m); line.frustumCulled = false; return line;
+  }
+  const circle = (r, n = 256) => { const pts = []; for (let i = 0; i <= n; i++){ const a = i/n*Math.PI*2; pts.push(new THREE.Vector3(Math.cos(a)*r, 0, Math.sin(a)*r)); } return pts; };
+  // the sky: stars, thicker along the Milky Way, over a faint printed haze
+  function makeSky(R, uT, seed = 8){
+    const g = new THREE.Group();
+    const rnd = (a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a>>>15, 1|a); t = t + Math.imul(t ^ t>>>7, 61|t) ^ t; return ((t ^ t>>>14)>>>0)/4294967296; })(seed);
+    const N = 9000, pos = new Float32Array(N*3), col = new Float32Array(N*3), siz = new Float32Array(N), ph = new Float32Array(N);
+    const band = new THREE.Vector3(0.3, 0.8, -0.52).normalize(), v = new THREE.Vector3();
+    for (let i = 0; i < N; i++){ const u = rnd()*2 - 1, a = rnd()*Math.PI*2, s = Math.sqrt(1 - u*u); v.set(s*Math.cos(a), u, s*Math.sin(a));
+      if (i % 5 < 2) v.addScaledVector(band, -v.dot(band)*(1 - (rnd() - 0.5)*0.35)).normalize();
+      pos.set([v.x*R, v.y*R, v.z*R], i*3); const t = rnd(), c = t < 0.15 ? [1, 0.82, 0.62] : t < 0.3 ? [0.7, 0.8, 1] : [0.96, 0.96, 1]; col.set(c, i*3);
+      siz[i] = rnd() < 0.03 ? 3.6 + rnd()*1.8 : 1.1 + rnd()*rnd()*2.2; ph[i] = rnd()*100; }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geo.setAttribute('size', new THREE.BufferAttribute(siz, 1)); geo.setAttribute('phase', new THREE.BufferAttribute(ph, 1));
+    const sm = new THREE.ShaderMaterial({ uniforms: { uT, uPx: { value: 1 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      vertexShader: `attribute float size, phase; attribute vec3 color; uniform float uT, uPx; varying vec3 vC; varying float vA;
+        void main(){ vC = color; vA = 0.65 + 0.35*sin(uT*(1.3 + fract(phase)*2.5) + phase); gl_Position = projectionMatrix*modelViewMatrix*vec4(position, 1.0); gl_PointSize = size*uPx; }`,
+      fragmentShader: `varying vec3 vC; varying float vA; void main(){ float r = length(gl_PointCoord - 0.5); float a = smoothstep(0.5, 0.0, r); gl_FragColor = vec4(vC*vA*a*a, 1.0); }` });
+    const stars = new THREE.Points(geo, sm); stars.frustumCulled = false; stars.renderOrder = -2; g.add(stars);
+    const haze = new THREE.Mesh(new THREE.SphereGeometry(R*1.1, 48, 24), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: { uB: { value: band } },
+      vertexShader: `varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix*modelViewMatrix*vec4(position, 1.0); }`,
+      fragmentShader: `uniform vec3 uB; varying vec3 vD;` + NOISE + `
+        void main(){ float b = exp(-pow(dot(vD, uB)/0.2, 2.0)); float n = n3(vD*5.0)*0.6 + n3(vD*13.0)*0.3 + n3(vD*31.0)*0.1;
+          float dust = smoothstep(0.55, 0.75, n3(vD*9.0 + 4.0))*b;
+          vec3 c = vec3(0.075, 0.08, 0.13)*b*(0.45 + n) + vec3(0.09, 0.07, 0.1)*pow(b, 3.0)*n - vec3(0.03)*dust;
+          c = floor(c*60.0 + 0.5)/60.0;
+          gl_FragColor = vec4(max(c, 0.0) + vec3(0.008, 0.01, 0.025), 1.0); }` }));
+    haze.renderOrder = -3; haze.frustumCulled = false; g.add(haze);
+    return { group: g, stars, starMat: sm, haze };
+  }
+  // the Earth: the illustrated map, toon-lit; toon clouds; a thin atmosphere on the day side; an ink hull (no halo shells)
+  function makeEarth(R, map, uT){
+    const U = { uMap: { value: map }, uSun: { value: new THREE.Vector3() }, uT, uPing: { value: 0 }, uClear: { value: new THREE.Vector3(0, 1, 0) }, uCloudA: { value: 1 } };
+    const earth = new THREE.Group(), spin = new THREE.Group(); earth.add(spin);
+    const LF = `
+      float bands(float nl){ return nl < -0.06 ? 0.0 : nl < 0.14 ? 0.6 : nl < 0.42 ? 0.84 : 1.0; }
+      vec3 shade(vec3 base, float nl){ float b = bands(nl); vec3 night = base*vec3(0.16, 0.19, 0.28) + vec3(0.012, 0.022, 0.06);
+        vec3 c = b > 0.0 ? base*b : night; c += vec3(0.95, 0.5, 0.25)*0.18*exp(-pow((nl + 0.02)/0.06, 2.0)); return c; }`;
+    const geo = new THREE.SphereGeometry(R, 128, 96);
+    const globe = new THREE.Mesh(geo, new THREE.ShaderMaterial({ uniforms: U,
+      vertexShader: `varying vec2 vUv; varying vec3 vN, vW, vL; void main(){ vUv = uv; vL = position; vN = normalize(mat3(modelMatrix)*normal); vW = (modelMatrix*vec4(position, 1.0)).xyz; gl_Position = projectionMatrix*viewMatrix*vec4(vW, 1.0); }`,
+      fragmentShader: `uniform sampler2D uMap; uniform vec3 uSun, uClear; uniform float uPing; varying vec2 vUv; varying vec3 vN, vW, vL;` + LF + `
+        void main(){ vec3 base = texture2D(uMap, vUv).rgb; vec3 n = normalize(vN); float nl = dot(n, normalize(uSun - vW)); vec3 c = shade(base, nl);
+          float rim = pow(1.0 - max(dot(n, normalize(cameraPosition - vW)), 0.0), 3.0); c += vec3(0.3, 0.5, 0.9)*0.25*rim*(1.0 - step(0.0, nl));
+          float d = acos(clamp(dot(normalize(vL), normalize(uClear)), -1.0, 1.0));
+          for (int k = 0; k < 2; k++){ float ph = uPing - float(k)*0.9; if (ph > 0.0 && ph < 2.2){ float r = ph*0.045, w = 0.0025 + ph*0.001;
+            c = mix(c, vec3(0.99, 0.82, 0.33), smoothstep(w, 0.0, abs(d - r))*(1.0 - ph/2.2)*0.95); } }
+          if (uPing > 0.0) c = mix(c, vec3(1.0, 0.86, 0.4), smoothstep(0.006, 0.003, d)*smoothstep(0.0, 0.3, uPing));
+          gl_FragColor = vec4(c, 1.0); }` }));
+    spin.add(globe); globe.add(inkHull(geo, R*0.018, 0x0b1020));
+    const clouds = new THREE.Mesh(new THREE.SphereGeometry(R*1.012, 128, 96), new THREE.ShaderMaterial({ uniforms: U, transparent: true, depthWrite: false, extensions: { derivatives: true },
+      vertexShader: `varying vec3 vP, vN, vW; void main(){ vP = position; vN = normalize(mat3(modelMatrix)*normal); vW = (modelMatrix*vec4(position, 1.0)).xyz; gl_Position = projectionMatrix*viewMatrix*vec4(vW, 1.0); }`,
+      fragmentShader: `uniform vec3 uSun, uClear; uniform float uT, uCloudA; varying vec3 vP, vN, vW;` + LF + NOISE + `
+        void main(){ vec3 p = normalize(vP); float lat = abs(p.y);
+          vec3 q = p*5.0 + vec3(uT*0.012, 0.0, 0.0);
+          float n = n3(q)*0.5 + n3(q*2.1 + 3.1)*0.27 + n3(q*4.6 - 1.3)*0.15 + n3(q*9.8)*0.08;
+          n += 0.1*sin(p.y*11.0 + n3(q*0.7)*4.0) - 0.12*smoothstep(0.12, 0.3, lat)*smoothstep(0.55, 0.32, lat);
+          n -= 0.28*smoothstep(0.985, 0.998, dot(p, normalize(uClear)));
+          float th = 0.63, aa = fwidth(n)*1.2 + 0.002;
+          float m = smoothstep(th - aa, th + aa, n), ink = smoothstep(th - aa*2.5, th, n) - smoothstep(th + aa*0.5, th + aa*3.0, n);
+          float nl = dot(normalize(vN), normalize(uSun - vW)), lit = bands(nl);
+          vec3 c = shade(n > th + 0.07 ? vec3(0.99, 0.99, 1.0) : vec3(0.83, 0.88, 0.95), nl);
+          float day = smoothstep(-0.2, 0.05, nl);
+          vec4 o = vec4(c, m*mix(0.45, 0.96, day));
+          o = mix(o, vec4(vec3(0.34, 0.42, 0.58)*max(0.2, step(0.01, lit)), 0.85*mix(0.3, 1.0, day)), ink*0.7);
+          gl_FragColor = vec4(o.rgb, o.a*uCloudA); }` }));
+    spin.add(clouds);
+    // the atmosphere: a thin blue limb, only where the Sun reaches, added on top (it never darkens anything)
+    const atmo = new THREE.Mesh(new THREE.SphereGeometry(R*1.045, 96, 64), new THREE.ShaderMaterial({ uniforms: U, transparent: true, depthWrite: false, side: THREE.BackSide, blending: THREE.AdditiveBlending,
+      vertexShader: `varying vec3 vN, vW; void main(){ vN = normalize(mat3(modelMatrix)*normal); vW = (modelMatrix*vec4(position, 1.0)).xyz; gl_Position = projectionMatrix*viewMatrix*vec4(vW, 1.0); }`,
+      fragmentShader: `uniform vec3 uSun; varying vec3 vN, vW;
+        void main(){ vec3 n = -normalize(vN), v = normalize(cameraPosition - vW); float x = max(dot(n, v), 0.0);
+          float lit = smoothstep(-0.25, 0.35, dot(-n, normalize(uSun - vW)));
+          float a = pow(smoothstep(0.0, 0.45, x), 1.5)*(1.0 - smoothstep(0.45, 0.9, x));
+          gl_FragColor = vec4(vec3(0.38, 0.66, 1.0)*a*lit*0.9, 1.0); }` }));
+    earth.add(atmo);
+    return { group: earth, spin, globe, clouds, atmo, U, update(sun){ U.uSun.value.copy(sun); } };
+  }
+  function setKeyToView(k){ KEY_TO_VIEW = k; }
+  return { setKeyToView, planetMaterial, makePlanet, makeRings, makeSun, orbitLine, circle, makeSky, makeEarth, inkHull, LOOKS };
+})();
+
+/* ======================= space: the stars, a toon solar system, and an illustrated Earth (drawn with the solar kit) ======================= */
 const space = new THREE.Scene();
 space.background = new THREE.Color(0x020309);
 const spaceCam = new THREE.PerspectiveCamera(42, 1, 0.02, 90000);
 onResize.push(a => { spaceCam.aspect = a; spaceCam.updateProjectionMatrix(); });
 const spaceT = { value: 0 };
+const SUN_POS = new THREE.Vector3(0, 0, 0);
 
-// the stars, thicker along the Milky Way, and the faint band itself
-{ const N = 9000, pos = new Float32Array(N*3), col = new Float32Array(N*3), siz = new Float32Array(N), ph = new Float32Array(N), r = mulberry32(8);
-  const band = new THREE.Vector3(0.3, 0.8, -0.52).normalize(), v = new THREE.Vector3(), R = 30000;
-  for (let i=0;i<N;i++){
-    const u = r()*2 - 1, a = r()*Math.PI*2, s = Math.sqrt(1 - u*u); v.set(s*Math.cos(a), u, s*Math.sin(a));
-    if (i % 5 < 2){ v.addScaledVector(band, -v.dot(band)*(1 - (r() - 0.5)*0.35)).normalize(); }      // pull a share of them into the band
-    pos.set([v.x*R, v.y*R, v.z*R], i*3);
-    const t = r(), c = t < 0.15 ? [1, 0.82, 0.62] : t < 0.3 ? [0.7, 0.8, 1] : [0.96, 0.96, 1]; col.set(c, i*3);
-    siz[i] = r() < 0.03 ? 3.6 + r()*1.8 : 1.1 + r()*r()*2.2; ph[i] = r()*100; }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  g.setAttribute('size', new THREE.BufferAttribute(siz, 1)); g.setAttribute('phase', new THREE.BufferAttribute(ph, 1));
-  const m = new THREE.ShaderMaterial({ uniforms:{ uT:spaceT, uPx:{ value: 1 } }, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
-    vertexShader:`attribute float size, phase; attribute vec3 color; uniform float uT, uPx; varying vec3 vC; varying float vA;
-      void main(){ vC = color; vA = 0.65 + 0.35*sin(uT*(1.3 + fract(phase)*2.5) + phase); vec4 p = projectionMatrix*modelViewMatrix*vec4(position, 1.0); gl_Position = p; gl_PointSize = size*uPx; }`,
-    fragmentShader:`varying vec3 vC; varying float vA; void main(){ vec2 d = gl_PointCoord - 0.5; float r = length(d); float a = smoothstep(0.5, 0.0, r); a = a*a; gl_FragColor = vec4(vC*vA*a, 1.0); }` });
-  const stars = new THREE.Points(g, m); stars.frustumCulled = false; stars.renderOrder = -2; space.add(stars); stars.userData.mat = m; space.userData.stars = stars;
-  const haze = new THREE.Mesh(new THREE.SphereGeometry(R*1.1, 48, 24), new THREE.ShaderMaterial({ side:THREE.BackSide, depthWrite:false, uniforms:{ uB:{ value: band } },
-    vertexShader:`varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix*modelViewMatrix*vec4(position, 1.0); }`,
-    fragmentShader:`uniform vec3 uB; varying vec3 vD;
-      float h(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 45.164)))*43758.5453); }
-      float n3(vec3 p){ vec3 i = floor(p), f = fract(p); f = f*f*(3.0 - 2.0*f);
-        return mix(mix(mix(h(i), h(i+vec3(1,0,0)), f.x), mix(h(i+vec3(0,1,0)), h(i+vec3(1,1,0)), f.x), f.y), mix(mix(h(i+vec3(0,0,1)), h(i+vec3(1,0,1)), f.x), mix(h(i+vec3(0,1,1)), h(i+vec3(1,1,1)), f.x), f.y), f.z); }
-      void main(){ float b = exp(-pow(dot(vD, uB)/0.2, 2.0)); float n = n3(vD*5.0)*0.6 + n3(vD*13.0)*0.3 + n3(vD*31.0)*0.1;
-        float dust = smoothstep(0.55, 0.75, n3(vD*9.0 + 4.0))*b;
-        vec3 c = vec3(0.075, 0.08, 0.13)*b*(0.45 + n) + vec3(0.09, 0.07, 0.1)*pow(b, 3.0)*n - vec3(0.03)*dust;
-        c = floor(c*60.0 + 0.5)/60.0;                                  // lightly posterized, like printed ink
-        gl_FragColor = vec4(max(c, 0.0) + vec3(0.008, 0.01, 0.025), 1.0); }` }));
-  haze.renderOrder = -3; haze.frustumCulled = false; space.add(haze); space.userData.haze = haze; }
-
-// light: the Sun, and a little fill so the night sides keep their shapes
-const sunLight = new THREE.PointLight(0xfff1d8, 1.05, 0, 0); space.add(sunLight);
-space.add(new THREE.AmbientLight(0x3a4666, 0.42));
-
-// the Sun: banded toon disc with a boiling surface and a flame-edged corona with an ink rim
+{ const sky = SolarKit.makeSky(30000, spaceT, 8); space.add(sky.group); space.userData.stars = sky.stars; sky.stars.userData.mat = sky.starMat; }
 const SUN_R = 40;
-{ const core = new THREE.Mesh(new THREE.SphereGeometry(SUN_R, 64, 40), new THREE.ShaderMaterial({ uniforms:{ uT:spaceT },
-    vertexShader:`varying vec3 vN, vP, vV; void main(){ vN = normalize(normalMatrix*normal); vP = position; vec4 mv = modelViewMatrix*vec4(position, 1.0); vV = normalize(-mv.xyz); gl_Position = projectionMatrix*mv; }`,
-    fragmentShader:`uniform float uT; varying vec3 vN, vP, vV;
-      float h(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 45.164)))*43758.5453); }
-      float n3(vec3 p){ vec3 i = floor(p), f = fract(p); f = f*f*(3.0 - 2.0*f);
-        return mix(mix(mix(h(i), h(i+vec3(1,0,0)), f.x), mix(h(i+vec3(0,1,0)), h(i+vec3(1,1,0)), f.x), f.y), mix(mix(h(i+vec3(0,0,1)), h(i+vec3(1,0,1)), f.x), mix(h(i+vec3(0,1,1)), h(i+vec3(1,1,1)), f.x), f.y), f.z); }
-      void main(){ float f = dot(normalize(vN), normalize(vV)); vec3 p = vP/12.0;
-        float boil = n3(p + vec3(0.0, uT*0.35, 0.0))*0.6 + n3(p*2.3 - vec3(uT*0.5))*0.4;
-        float k = f + (boil - 0.5)*0.28;
-        vec3 c = k > 0.62 ? vec3(1.0, 0.97, 0.78) : k > 0.38 ? vec3(1.0, 0.86, 0.42) : k > 0.16 ? vec3(1.0, 0.66, 0.24) : vec3(0.93, 0.42, 0.16);
-        float cell = smoothstep(0.62, 0.7, n3(p*3.1 + uT*0.2)); c = mix(c, c*vec3(1.0, 0.9, 0.75), cell*0.35);
-        gl_FragColor = vec4(c*1.12, 1.0); }` }));
-  space.add(core);
-  const corona = new THREE.Mesh(new THREE.PlaneGeometry(SUN_R*6, SUN_R*6), new THREE.ShaderMaterial({ uniforms:{ uT:spaceT }, transparent:true, depthWrite:false,
-    vertexShader:`varying vec2 vU; void main(){ vU = uv*2.0 - 1.0; vec4 mv = modelViewMatrix*vec4(0.0, 0.0, 0.0, 1.0); mv.xy += position.xy; gl_Position = projectionMatrix*mv; }`,
-    fragmentShader:`uniform float uT; varying vec2 vU;
-      float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233)))*43758.5453); }
-      float vn(vec2 p){ vec2 i = floor(p), f = fract(p), u = f*f*(3.0-2.0*f); return mix(mix(h(i), h(i+vec2(1,0)), u.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), u.x), u.y); }
-      void main(){ float r = length(vU)*3.0, a = atan(vU.y, vU.x);
-        float fl = 1.0 + 0.16*vn(vec2(a*5.0, uT*0.9)) + 0.1*vn(vec2(a*13.0 + 3.0, uT*1.7)) + 0.05*sin(a*23.0 + uT*2.0);
-        float inside = step(r, fl), rim = smoothstep(fl - 0.035, fl - 0.012, r)*inside;
-        vec3 c = mix(vec3(1.0, 0.58, 0.18), vec3(1.0, 0.8, 0.35), smoothstep(fl, 1.0, r));
-        float glow = exp(-(r - 1.0)*2.2)*0.55*step(1.0, r);
-        float ray = pow(max(0.0, sin(a*9.0 + uT*0.25)), 18.0)*exp(-(r - 1.0)*1.3)*0.25;
-        vec4 o = vec4(c, inside*step(0.98, r));
-        o.rgb = mix(o.rgb, vec3(0.45, 0.16, 0.06), rim);
-        o = mix(vec4(vec3(1.0, 0.75, 0.4)*(glow + ray), glow + ray), o, o.a);
-        gl_FragColor = o; }` }));
-  corona.renderOrder = 2; space.add(corona); space.userData.sunCore = core; }
+{ const sun = SolarKit.makeSun(SUN_R, spaceT); space.add(sun.group); space.userData.sunCore = sun.core; }
 
-// planet maps: flat painted bands and spots, drawn once
-function planetMap(kind){
-  const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 512; const g = cv.getContext('2d'), r = mulberry32(kind.length*97 + 3);
-  const band = (y0, y1, c) => { g.fillStyle = c; g.beginPath(); g.moveTo(0, y0); for (let x = 0; x <= 1024; x += 16) g.lineTo(x, y0 + Math.sin(x/70 + y0)*4 + (r() - 0.5)*2); for (let x = 1024; x >= 0; x -= 16) g.lineTo(x, y1 + Math.sin(x/53 + y1)*4); g.closePath(); g.fill(); };
-  const blob = (x, y, rx, ry, c) => { for (const dx of [-1024, 0, 1024]){ g.fillStyle = c; g.beginPath(); g.ellipse(x + dx, y, rx, ry, 0, 0, Math.PI*2); g.fill(); } };
-  if (kind === 'jupiter'){ const C = ['#e9dcc0', '#c99c6c', '#f0e6d0', '#b98458', '#e5d3b0', '#a8734e', '#efe3c9', '#c69a70', '#e2d1ae'];
-    g.fillStyle = C[0]; g.fillRect(0, 0, 1024, 512); let y = 0; for (let i = 0; y < 512; i++){ const h = 26 + r()*44; band(y, y + h, C[i % C.length]); y += h; }
-    blob(700, 330, 70, 34, '#b8563c'); blob(700, 330, 48, 20, '#d0714c'); for (let i = 0; i < 30; i++) blob(r()*1024, 60 + r()*390, 14 + r()*30, 4 + r()*6, r() < 0.5 ? '#f3ead8' : '#9a6c48'); }
-  else if (kind === 'saturn'){ const C = ['#eadab0', '#d9c28c', '#efe2bf', '#cdb37e', '#e4d2a4']; g.fillStyle = C[0]; g.fillRect(0, 0, 1024, 512); let y = 0; for (let i = 0; y < 512; i++){ const h = 30 + r()*50; band(y, y + h, C[i % C.length]); y += h; } }
-  else if (kind === 'mars'){ g.fillStyle = '#c56a43'; g.fillRect(0, 0, 1024, 512); for (let i = 0; i < 26; i++) blob(r()*1024, 90 + r()*330, 40 + r()*110, 18 + r()*40, r() < 0.6 ? '#a4502f' : '#d98a5c');
-    g.fillStyle = '#f3ede4'; g.fillRect(0, 0, 1024, 34); g.fillRect(0, 488, 1024, 24); }
-  else if (kind === 'venus'){ g.fillStyle = '#e8cf97'; g.fillRect(0, 0, 1024, 512); let y = 0; for (let i = 0; y < 512; i++){ const h = 40 + r()*70; band(y, y + h, i % 2 ? '#dcbd7e' : '#f0dcae'); y += h; } }
-  else if (kind === 'mercury' || kind === 'moon'){ g.fillStyle = kind === 'moon' ? '#c9c7c0' : '#a99f94'; g.fillRect(0, 0, 1024, 512);
-    for (let i = 0; i < (kind === 'moon' ? 10 : 4); i++) blob(r()*1024, 120 + r()*260, 60 + r()*90, 40 + r()*60, kind === 'moon' ? '#9d9c97' : '#8f867c');
-    for (let i = 0; i < 70; i++){ const x = r()*1024, y = 40 + r()*430, s = 4 + r()*r()*22; blob(x, y, s, s*0.8, kind === 'moon' ? '#b2b0a9' : '#968c80'); blob(x + s*0.2, y - s*0.15, s*0.7, s*0.55, kind === 'moon' ? '#d7d5ce' : '#b5ab9f'); } }
-  else if (kind === 'uranus'){ g.fillStyle = '#9fd8dc'; g.fillRect(0, 0, 1024, 512); band(200, 320, '#b3e3e4'); }
-  else if (kind === 'neptune'){ g.fillStyle = '#4f7fd6'; g.fillRect(0, 0, 1024, 512); band(170, 230, '#6a93e0'); band(300, 340, '#3f6bc2'); blob(420, 300, 46, 24, '#2c4d99'); blob(610, 210, 26, 8, '#c9daf5'); }
-  const t = new THREE.CanvasTexture(cv); t.anisotropy = 8; return t;
-}
-const planetOutline = r => new THREE.MeshBasicMaterial({ color:0x0b0f1c, side:THREE.BackSide });
+// the planets where the flight passes them: [radius, orbit, angle on the orbit, axial tilt]
+const planets = [];
 function planet(name, radius, orbit, angle, tilt = 0){
-  const g = new THREE.Group(); g.position.set(Math.cos(angle)*orbit, 0, Math.sin(angle)*orbit); space.add(g);
-  const body = new THREE.Mesh(new THREE.SphereGeometry(radius, 48, 32), new THREE.MeshToonMaterial({ map: planetMap(name), gradientMap: toonRamp }));
-  body.rotation.z = tilt; g.add(body);
-  const ink = new THREE.Mesh(body.geometry, inkMat(radius*0.035, 0x0b0f1c)); body.add(ink);
-  if (orbit){ const pts = []; for (let i = 0; i <= 256; i++){ const a = i/256*Math.PI*2; pts.push(new THREE.Vector3(Math.cos(a)*orbit, 0, Math.sin(a)*orbit)); }
-    const ring = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineDashedMaterial({ color:0x8a9bc6, dashSize: orbit*0.035, gapSize: orbit*0.025, transparent:true, opacity:0.33 }));
-    ring.computeLineDistances(); space.add(ring); }
-  return { g, body, radius, orbit, angle };
+  const p = SolarKit.makePlanet(name, radius, { tilt, segments: radius > 9 ? 96 : 64 });
+  p.group.position.set(Math.cos(angle)*orbit, 0, Math.sin(angle)*orbit); space.add(p.group); planets.push(p);
+  if (orbit){ const o = SolarKit.orbitLine(SolarKit.circle(orbit), 0x8a9bc6, 0.33); space.add(o); orbits.push(o); }
+  return p;
 }
+const orbits = [];
 const PL = {
   mercury: planet('mercury', 3.2, 88, 2.6),
   venus:   planet('venus', 6.2, 128, 3.7),
-  earthOrbit: null,
   mars:    planet('mars', 4.2, 232, 0.36),
   jupiter: planet('jupiter', 22, 330, 0.28, 0.05),
   saturn:  planet('saturn', 18, 440, 0.66, 0.42),
   uranus:  planet('uranus', 10.5, 545, 1.35, 1.2),
   neptune: planet('neptune', 10, 625, 0.95, 0.5),
 };
-// Saturn's rings: painted bands on a flat ring, in the planet's tilt
-{ const s = PL.saturn, cv = document.createElement('canvas'); cv.width = 512; cv.height = 8; const g = cv.getContext('2d');
-  const C = [[0, '#00000000'], [0.06, '#c9b58a80'], [0.2, '#e8d8b0e6'], [0.42, '#d6c192f0'], [0.5, '#00000000'], [0.54, '#b9a47ad0'], [0.75, '#e3d3aad8'], [0.9, '#c7b48a90'], [1, '#00000000']];
-  const gr = g.createLinearGradient(0, 0, 512, 0); for (const [o, c] of C) gr.addColorStop(o, c); g.fillStyle = gr; g.fillRect(0, 0, 512, 8);
-  const tex = new THREE.CanvasTexture(cv), geo = new THREE.RingGeometry(s.radius*1.35, s.radius*2.35, 128, 1);
-  const p = geo.attributes.position, uv = geo.attributes.uv; for (let i = 0; i < p.count; i++){ const r = Math.hypot(p.getX(i), p.getY(i)); uv.setXY(i, (r - s.radius*1.35)/(s.radius), 0.5); }
-  const ring = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map:tex, transparent:true, side:THREE.DoubleSide, depthWrite:false }));
-  ring.rotation.x = -Math.PI/2 + 0.42; ring.rotation.y = 0.2; s.g.add(ring); }
 // a thin asteroid belt between Mars and Jupiter
 { const N = 2200, r = mulberry32(44), pos = new Float32Array(N*3);
   for (let i = 0; i < N; i++){ const a = r()*Math.PI*2, d = 262 + r()*40 + (r() - 0.5)*18; pos.set([Math.cos(a)*d, (r() - 0.5)*5, Math.sin(a)*d], i*3); }
@@ -1423,62 +1590,29 @@ const PL = {
   const dot = (() => { const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d'); x.fillStyle = '#fff'; x.beginPath(); x.arc(16, 16, 12, 0, Math.PI*2); x.fill(); return new THREE.CanvasTexture(c); })();
   space.add(new THREE.Points(g, new THREE.PointsMaterial({ color:0x8c8578, size:0.55, map:dot, alphaTest:0.4, sizeAttenuation:true, transparent:true, opacity:0.7 }))); }
 
-/* ---------- the Earth: the illustrated map on a toon globe, toon clouds, a blue rim and an ink outline ---------- */
+/* ---------- the Earth: the illustrated map, toon clouds, a thin blue limb, the Moon ---------- */
 const EARTH_R = 7, EARTH_ORBIT = 180, EARTH_A = 0.0;
 const EARTH = new THREE.Vector3(Math.cos(EARTH_A)*EARTH_ORBIT, 0, Math.sin(EARTH_A)*EARTH_ORBIT);
-{ const pts = []; for (let i = 0; i <= 256; i++){ const a = i/256*Math.PI*2; pts.push(new THREE.Vector3(Math.cos(a)*EARTH_ORBIT, 0, Math.sin(a)*EARTH_ORBIT)); }
-  const ring = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineDashedMaterial({ color:0x9fd0e8, dashSize: 6, gapSize: 4, transparent:true, opacity:0.4 })); ring.computeLineDistances(); space.add(ring); space.userData.earthRing = ring; }
+{ const o = SolarKit.orbitLine(SolarKit.circle(EARTH_ORBIT), 0x9fd0e8, 0.4); space.add(o); orbits.push(o); }
 const earthMapTex = new THREE.TextureLoader().load('images/earth-illustrated.jpg', t => { t.anisotropy = renderer.capabilities.getMaxAnisotropy(); });
 earthMapTex.anisotropy = 8;
-const earthU = { uMap:{ value: earthMapTex }, uSun:{ value: new THREE.Vector3() }, uT: spaceT, uPing:{ value: 0 }, uClear:{ value: new THREE.Vector3(0, 1, 0) } };
-const earth = new THREE.Group(); earth.position.copy(EARTH); space.add(earth);
-const earthSpin = new THREE.Group(); earth.add(earthSpin);
-{ const lightFrag = `
-    float bands(float nl){ return nl < -0.06 ? 0.0 : nl < 0.14 ? 0.55 : nl < 0.42 ? 0.82 : 1.0; }
-    vec3 shade(vec3 base, float nl){ float b = bands(nl); vec3 night = base*0.12 + vec3(0.015, 0.03, 0.075);
-      vec3 c = mix(night, base*b, step(0.01, b)); c += vec3(0.95, 0.5, 0.25)*0.2*exp(-pow((nl + 0.02)/0.06, 2.0))*step(0.01, b); return c; }`;
-  const globe = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R, 128, 96), new THREE.ShaderMaterial({ uniforms: earthU,
-    vertexShader:`varying vec2 vUv; varying vec3 vN, vW, vL; void main(){ vUv = uv; vL = position; vN = normalize(mat3(modelMatrix)*normal); vW = (modelMatrix*vec4(position, 1.0)).xyz; gl_Position = projectionMatrix*viewMatrix*vec4(vW, 1.0); }`,
-    fragmentShader:`uniform sampler2D uMap; uniform vec3 uSun; varying vec2 vUv; varying vec3 vN, vW;` + lightFrag + `
-      uniform vec3 uClear; uniform float uPing; varying vec3 vL;
-      void main(){ vec3 base = texture2D(uMap, vUv).rgb; float nl = dot(normalize(vN), normalize(uSun - vW)); vec3 c = shade(base, nl);
-        float d = acos(clamp(dot(normalize(vL), normalize(uClear)), -1.0, 1.0));
-        for (int k = 0; k < 2; k++){ float ph = uPing - float(k)*0.9; if (ph > 0.0 && ph < 2.2){ float r = ph*0.045, w = 0.0025 + ph*0.001;
-          c = mix(c, vec3(0.99, 0.82, 0.33), smoothstep(w, 0.0, abs(d - r))*(1.0 - ph/2.2)*0.95); } }
-        if (uPing > 0.0) c = mix(c, vec3(1.0, 0.86, 0.4), smoothstep(0.006, 0.003, d)*smoothstep(0.0, 0.3, uPing));
-        gl_FragColor = vec4(c, 1.0); }` }));
-  earthSpin.add(globe);
-  const clouds = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R*1.01, 128, 96), new THREE.ShaderMaterial({ uniforms: earthU, transparent:true, depthWrite:false, extensions:{ derivatives:true },
-    vertexShader:`varying vec3 vP, vN, vW; void main(){ vP = position; vN = normalize(mat3(modelMatrix)*normal); vW = (modelMatrix*vec4(position, 1.0)).xyz; gl_Position = projectionMatrix*viewMatrix*vec4(vW, 1.0); }`,
-    fragmentShader:`uniform vec3 uSun, uClear; uniform float uT; varying vec3 vP, vN, vW;` + lightFrag + `
-      float h(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 45.164)))*43758.5453); }
-      float n3(vec3 p){ vec3 i = floor(p), f = fract(p); f = f*f*(3.0 - 2.0*f);
-        return mix(mix(mix(h(i), h(i+vec3(1,0,0)), f.x), mix(h(i+vec3(0,1,0)), h(i+vec3(1,1,0)), f.x), f.y), mix(mix(h(i+vec3(0,0,1)), h(i+vec3(1,0,1)), f.x), mix(h(i+vec3(0,1,1)), h(i+vec3(1,1,1)), f.x), f.y), f.z); }
-      void main(){ vec3 p = normalize(vP); float lat = abs(p.y);
-        vec3 q = p*5.0 + vec3(uT*0.012, 0.0, 0.0);
-        float n = n3(q)*0.5 + n3(q*2.1 + 3.1)*0.27 + n3(q*4.6 - 1.3)*0.15 + n3(q*9.8)*0.08;
-        n += 0.1*sin(p.y*11.0 + n3(q*0.7)*4.0) - 0.12*smoothstep(0.12, 0.3, lat)*smoothstep(0.55, 0.32, lat);   // storm belts, dry horse latitudes
-        n -= 0.28*smoothstep(0.985, 0.998, dot(p, normalize(uClear)));                                              // a clear day over Nevada
-        float th = 0.63, aa = fwidth(n)*1.2 + 0.002;
-        float m = smoothstep(th - aa, th + aa, n), ink = smoothstep(th - aa*2.5, th, n) - smoothstep(th + aa*0.5, th + aa*3.0, n);
-        float nl = dot(normalize(vN), normalize(uSun - vW)); float lit = bands(nl);
-        vec3 c = n > th + 0.07 ? vec3(0.99, 0.99, 1.0) : vec3(0.83, 0.88, 0.95);
-        c = shade(c, nl);
-        vec4 o = vec4(c, m*0.96);
-        o = mix(o, vec4(vec3(0.34, 0.42, 0.58)*max(0.2, step(0.01, lit)), 0.85), ink*0.7);
-        gl_FragColor = o; }` }));
-  earthSpin.add(clouds); earth.userData.clouds = clouds;
-  const rim = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R*1.06, 96, 64), new THREE.ShaderMaterial({ uniforms: earthU, transparent:true, depthWrite:false, side:THREE.BackSide,
-    vertexShader:`varying vec3 vN, vW; void main(){ vN = normalize(mat3(modelMatrix)*normal); vW = (modelMatrix*vec4(position, 1.0)).xyz; gl_Position = projectionMatrix*viewMatrix*vec4(vW, 1.0); }`,
-    fragmentShader:`uniform vec3 uSun; varying vec3 vN, vW;
-      void main(){ vec3 v = normalize(cameraPosition - vW); float x = abs(dot(normalize(vN), v)); float lit = smoothstep(-0.4, 0.3, dot(normalize(vN), normalize(uSun - vW)));
-        float a = smoothstep(0.0, 0.34, x); vec3 c = mix(vec3(0.35, 0.6, 0.95), vec3(0.6, 0.88, 1.0), a);
-        gl_FragColor = vec4(c*(0.55 + 0.45*lit), a*0.92*max(lit, 0.06)); }` }));
-  earth.add(rim);
-  const outline = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R*1.075, 96, 64), new THREE.MeshBasicMaterial({ color:0x0b1020, side:THREE.BackSide })); earth.add(outline);
-  // the Moon, a little way off
-  const moon = new THREE.Mesh(new THREE.SphereGeometry(1.9, 48, 32), new THREE.MeshToonMaterial({ map: planetMap('moon'), gradientMap: toonRamp }));
-  moon.add(new THREE.Mesh(moon.geometry, inkMat(0.07, 0x0b0f1c))); moon.position.set(-34, 9, -6); earth.add(moon); earth.userData.moon = moon; }
+const EK = SolarKit.makeEarth(EARTH_R, earthMapTex, spaceT);
+const earth = EK.group, earthSpin = EK.spin, earthU = EK.U;
+earth.position.copy(EARTH); space.add(earth);
+const moonP = SolarKit.makePlanet('moon', 1.9, { ink: 0.04 }); moonP.group.position.set(-34, 9, -6); earth.add(moonP.group); planets.push(moonP);
+
+window.__space = { cam: () => spaceCam, PL };           // for review
+// each frame: the Sun lights everything from the middle; orbits fade out near the camera
+function updateSpace(t){
+  for (const p of planets) p.update(SUN_POS, t);
+  EK.update(SUN_POS);
+  for (const o of orbits) o.material.uniforms.uNear.value = 26;
+  // keep the near plane as far out as the nearest body allows, so depth stays precise
+  let near = 1e9; for (const p of planets){ p.group.getWorldPosition(_wp); near = Math.min(near, _wp.distanceTo(spaceCam.position) - p.radius*2.4); }
+  near = Math.min(near, EARTH.distanceTo(spaceCam.position) - EARTH_R*1.1, spaceCam.position.length() - SUN_R*3);
+  near = clamp(near*0.25, 0.02, 40); if (Math.abs(spaceCam.near - near) > near*0.05){ spaceCam.near = near; spaceCam.updateProjectionMatrix(); }
+}
+const _wp = new THREE.Vector3();
 
 // where a place on the map sits on the unturned globe (three.js sphere UVs: u = 0 at longitude -180)
 function geoDir(lat, lon){ const phi = (lon + 180)/360*Math.PI*2, th = (90 - lat)*Math.PI/180;
@@ -2021,7 +2155,7 @@ function spaceShot(tt){
   const nev = earthSpin.localToWorld(geoDir(NEVADA.lat, NEVADA.lon).multiplyScalar(EARTH_R));
   const aim = EARTH.clone().lerp(nev, 0.92*smooth(21.0, 25.8, t));
   look.copy(sl.lerp(aim, w)); spaceCam.lookAt(look);
-  spaceT.value = t; earthU.uSun.value.set(0, 0, 0); earthU.uPing.value = Math.max(0, (t - 23.2)*0.9);
+  spaceT.value = t; updateSpace(t); earthU.uPing.value = Math.max(0, (t - 23.2)*0.9);
   space.userData.stars.userData.mat.uniforms.uPx.value = renderer.getPixelRatio();
 }
 

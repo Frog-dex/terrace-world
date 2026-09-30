@@ -12,6 +12,7 @@
   canvas{display:block;width:100%;height:100%}
   .skip-intro{position:fixed;top:max(18px,env(safe-area-inset-top));left:max(20px,env(safe-area-inset-left));z-index:6;color:#e3d6aa;opacity:.62;font:300 11px "Josefin Sans","Futura",sans-serif;letter-spacing:.28em;text-transform:uppercase;text-decoration:none;padding:6px 2px;transition:opacity .25s}
   .skip-intro:hover,.skip-intro:focus-visible{opacity:1;outline:none}
+  .turn-hint{position:fixed;left:50%;bottom:max(64px,calc(env(safe-area-inset-bottom) + 56px));transform:translateX(-50%);z-index:6;color:#e3d6aa;opacity:0;font:300 11px "Josefin Sans","Futura",sans-serif;letter-spacing:.2em;text-transform:uppercase;text-align:center;width:80vw;pointer-events:none;transition:opacity .6s}
 </style>
 </head>
 <body>
@@ -527,11 +528,14 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const canvas = document.getElementById('c');
 let renderer;
 try { renderer = new THREE.WebGLRenderer({ canvas, antialias:true }); } catch(e){ finish(); return; }
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+const COARSE = matchMedia('(pointer: coarse)').matches;   // phones and tablets: a little lighter on the GPU
+renderer.setPixelRatio(Math.min(devicePixelRatio, COARSE ? 1.25 : 1.5));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0x9fd3de, 2700, 16000);
 const camera = new THREE.PerspectiveCamera(38, 1, 0.6, 25000);
+// every shot is framed for a wide screen; on a tall phone the lens opens until most of that width still fits
+function LENS(v, a){ if (a >= 1.2) return v; const h = Math.tan(v*Math.PI/360)*Math.max(a, 0.85); return Math.max(v, 2*Math.atan(h/a)*180/Math.PI); }
 
 const toonRamp = new THREE.DataTexture(new Uint8Array([105,180,245]), 3, 1, THREE.LuminanceFormat);
 toonRamp.minFilter = toonRamp.magFilter = THREE.NearestFilter; toonRamp.generateMipmaps = false; toonRamp.needsUpdate = true;
@@ -569,7 +573,7 @@ const grainU = { value: makeGrainTex() };
 /* ---------- light and sky (the game's) ---------- */
 const hemi = new THREE.HemisphereLight(0xffffff, 0x51606e, 0.5); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffffff, 0.9);
-sun.castShadow = true; sun.shadow.mapSize.set(2048,2048); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.2; sun.shadow.radius = 2.5;
+sun.castShadow = true; sun.shadow.mapSize.set(COARSE ? 1024 : 2048, COARSE ? 1024 : 2048); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.2; sun.shadow.radius = 2.5;
 scene.add(sun, sun.target);
 let shadowBox = 0, sunDist = 1000;
 function setShadowBox(s){ s = Math.round(s/15)*15; if (s === shadowBox) return; shadowBox = s;
@@ -1631,7 +1635,7 @@ const SolarKit = (() => {
 const space = new THREE.Scene();
 space.background = new THREE.Color(0x020309);
 const spaceCam = new THREE.PerspectiveCamera(42, 1, 0.02, 90000);
-onResize.push(a => { spaceCam.aspect = a; spaceCam.updateProjectionMatrix(); });
+onResize.push(a => { spaceCam.aspect = a; spaceCam.fov = LENS(42, a); spaceCam.updateProjectionMatrix(); });
 const spaceT = { value: 0 };
 const SUN_POS = new THREE.Vector3(0, 0, 0);
 
@@ -2563,7 +2567,7 @@ function townShot(tau, t, dt){
   const ww = smooth(16.8, 17.8, tau)*(1 - smooth(22.6, 24.2, tau));
   if (ww > 0){ const p = wagonPose(tau); look.lerp(toWorld([p.x, p.y, 1.2]), ww*0.75); }
   const floor = HEIGHT(camera.position.x/U + CX, camera.position.z/U + CY) + 1.2; if (camera.position.y < floor) camera.position.y = floor;
-  const fov = fovE ?? lerp(38, 52, smooth(29.0, 31.5, tau)); if (Math.abs(camera.fov - fov) > 0.01){ camera.fov = fov; camera.updateProjectionMatrix(); }
+  const fov = LENS(fovE ?? lerp(38, 52, smooth(29.0, 31.5, tau)), camera.aspect); if (Math.abs(camera.fov - fov) > 0.01){ camera.fov = fov; camera.updateProjectionMatrix(); }
   camera.lookAt(look);
   if (DBGCAM){ camera.position.copy(toWorld(DBGCAM.slice(0, 3))); look.copy(toWorld(DBGCAM.slice(3))); camera.lookAt(look); }
   if (TOP){ camera.position.set(X(512), 1150, Z(384) + 0.01); camera.up.set(0, 0, -1); camera.lookAt(X(512), 0, Z(384)); look.set(X(512), 0, Z(384)); }
@@ -2681,6 +2685,10 @@ addEventListener('keydown', e => { if (e.key === 'Escape') finish(); });
 // on the website: a quiet way past the intro (the menu's own frame has a back button, so not when replayed from there)
 if (SITE && !EMBED){ const skip = document.createElement('a'); skip.href = SITE.menu; skip.textContent = 'Skip intro'; skip.className = 'skip-intro';
   skip.addEventListener('click', e => { e.preventDefault(); finish(); }); document.body.appendChild(skip); }
+// a phone held upright: one quiet line suggesting it sideways, gone after a few seconds or once it turns
+if (COARSE && innerHeight > innerWidth){ const hint = document.createElement('div'); hint.className = 'turn-hint'; hint.textContent = 'Turn your phone sideways for the full picture'; document.body.appendChild(hint);
+  const gone = () => { hint.style.opacity = '0'; setTimeout(() => hint.remove(), 700); };
+  setTimeout(() => hint.style.opacity = '0.7', 900); setTimeout(gone, 6500); addEventListener('resize', () => { if (innerWidth > innerHeight) gone(); }); }
 resize();
 requestAnimationFrame(frame);
 

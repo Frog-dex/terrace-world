@@ -7,6 +7,7 @@ import { createTownSky } from './town-sky.js?v=11b';
 import { createTownLoop } from './town-loop.js?v=school-life-11';
 import { createSignFooting } from './sign-footing.js?v=11';
 import { createPortalReflections } from './portal-reflections.js?v=11';
+import { createMenuAmbient } from './menu-ambient.js?v=1';
 
 const menu = document.querySelector('.drawn-menu');
 const svg = menu.querySelector('svg');
@@ -33,7 +34,7 @@ const letteringYaw={value:0},energyTime={value:0},energyAmount={value:0};
 let renderer, scene, camera, assembly, globe, globeMaterial, beltCurve, beltLength, fan, rearFan;
 let studioCamera, townCamera, signRoot, environment, cameraRig, motorMount, sunDirection;
 let signBounds=null, cleanPlate=false;
-let traffic,worldTime=0;
+let traffic,ambient,worldTime=0;
 let sky,skyScene,townFilm,footing,reflections,captureSource=false,filmChoiceMade=false;
 let ready=false, phase='menu', kind='earth', cycleTime=0, active=false, manualIdle=false;
 let driveDistance=0, globeTime=0, paused=false, last=0, raf=0, hoverMenu=false, skipHold=false, textureReady=false, autoStarted=false;
@@ -328,6 +329,7 @@ async function prepare() {
   environment=await createTownEnvironment(THREE,scene);
   makeSchoolSign();
   traffic=createTownTraffic(THREE,environment);
+  ambient=createMenuAmbient(THREE,environment);
   environment.group.traverse(o=>{if(o.material?.map){o.material.map.anisotropy=renderer.capabilities.getMaxAnisotropy();o.material.map.needsUpdate=true;}});
   townCamera=new THREE.PerspectiveCamera(54,1.5,.05,150000);
   townCamera.position.copy(environment.toWorld([518,397,3.1]));
@@ -382,6 +384,49 @@ function updateFilmControls(){
   if(state?.duration){filmTimeline.max=state.duration;filmTimeline.value=state.time;document.querySelector('#town-film-value').value=state.time.toFixed(1)+' s';}
   filmStatus.textContent=embeddedMenu?'Original 3D town, source buildings, road traffic and live sky.':state?.error?state.error:state?.ready?((paused||!sceneMotion.checked)?'Town and sky paused. ':'Town and sky running. ')+'30-second school loop; clouds move independently.':'Original 3D town is active while the film loads.';
 }
+/* ---------- the opening's look: navy ink wherever the town's depth breaks (outlines and corners) ----------
+   A depth-only pass of the same view, read by one full-screen pass that draws the ink over the finished frame. */
+let ink=null;
+function makeInk(){
+  const rt=new THREE.WebGLRenderTarget(4,4,{depthBuffer:true});rt.depthTexture=new THREE.DepthTexture(4,4);rt.depthTexture.type=THREE.UnsignedIntType;
+  const material=new THREE.ShaderMaterial({uniforms:{tDepth:{value:rt.depthTexture},uTexel:{value:new THREE.Vector2(1,1)},uNear:{value:.5},uFar:{value:6000},uW:{value:1}},
+    vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.0,1.0);}',
+    fragmentShader:`uniform sampler2D tDepth;uniform vec2 uTexel;uniform float uNear,uFar,uW;varying vec2 vUv;
+      float dist(vec2 uv){float d=texture2D(tDepth,uv).x;if(d>=0.99999)return 1e6;return (uNear*uFar)/(uFar-(uFar-uNear)*d);}
+      void main(){
+        float c=dist(vUv);if(c>=1e6)discard;
+        vec2 o=uTexel*uW;
+        float l=dist(vUv-vec2(o.x,0.0)),r=dist(vUv+vec2(o.x,0.0)),u=dist(vUv+vec2(0.0,o.y)),d=dist(vUv-vec2(0.0,o.y));
+        float far=max(max(l,r),max(u,d));
+        float sil=smoothstep(c*0.04+0.15,c*0.16+0.6,far-c);                        // the near edge of an outline (small steps draw lighter)
+        float ic=1.0/c,lap=abs(1.0/l+1.0/r-2.0*ic)+abs(1.0/u+1.0/d-2.0*ic);
+        float crease=smoothstep(0.018,0.045,lap*c);                                 // a corner: the surface turns
+        float k=max(sil,crease)*(1.0-smoothstep(380.0,1700.0,c));
+        if(k<0.02)discard;
+        gl_FragColor=vec4(0.114,0.141,0.2,k*0.86);
+      }`,transparent:true,depthTest:false,depthWrite:false,toneMapped:false});
+  const quad=new THREE.Mesh(new THREE.PlaneGeometry(2,2),material);quad.frustumCulled=false;
+  const overlay=new THREE.Scene();overlay.add(quad);
+  return {rt,material,overlay,camera:new THREE.OrthographicCamera(-1,1,1,-1,0,1),depthOnly:new THREE.MeshBasicMaterial({colorWrite:false}),hide:[]};
+}
+function drawInk(){
+  ink||(ink=makeInk());
+  const size=renderer.getDrawingBufferSize(new THREE.Vector2()),k=Math.min(1,1300/size.y),w=Math.max(4,Math.round(size.x*k)),h=Math.max(4,Math.round(size.y*k));
+  if(ink.rt.width!==w||ink.rt.height!==h)ink.rt.setSize(w,h);
+  // see-through things (fences, glows, the emblem, sparks) are not solid shapes: leave them out of the outline pass
+  ink.hide.length=0;
+  scene.traverseVisible(o=>{const m=o.material;if(o.isSprite||o.isPoints||o.isLine||((o.isMesh)&&(!m||m.transparent||m.alphaTest>0||m.depthWrite===false||m.colorWrite===false||o.userData.noInk)))ink.hide.push(o);});
+  for(const o of ink.hide)o.visible=false;
+  const near=camera.near,far=camera.far,shadows=renderer.shadowMap.autoUpdate,background=scene.background;
+  camera.near=Math.max(near,.5);camera.far=Math.min(far,6000);camera.updateProjectionMatrix();
+  renderer.shadowMap.autoUpdate=false;scene.background=null;scene.overrideMaterial=ink.depthOnly;
+  renderer.setRenderTarget(ink.rt);renderer.clear();renderer.render(scene,camera);renderer.setRenderTarget(null);
+  scene.overrideMaterial=null;scene.background=background;renderer.shadowMap.autoUpdate=shadows;
+  const u=ink.material.uniforms;u.uNear.value=camera.near;u.uFar.value=camera.far;u.uTexel.value.set(1/w,1/h);u.uW.value=Math.max(1,h/760);
+  camera.near=near;camera.far=far;camera.updateProjectionMatrix();
+  for(const o of ink.hide)o.visible=true;
+  renderer.render(ink.overlay,ink.camera);
+}
 function renderFrame(){
   const town=townControl.checked,film=filmActive()&&!captureSource;
   const visible=environment.group.visible,background=scene.background;
@@ -397,6 +442,7 @@ function renderFrame(){
     renderer.clearDepth();
   }
   renderer.render(scene,camera);
+  if(town&&!film&&!captureSource&&!greenControl.checked)drawInk();
   environment.group.visible=visible;scene.background=background;
 }
 function schedule(){
@@ -534,6 +580,7 @@ function updateProximity(){
 function advance(dt){
   cinema.update(dt);
   if(scenePlaying()){worldTime+=dt;traffic?.update(worldTime);}
+  if(ambient?.update(dt,scenePlaying()&&!cinema.getState().mode))needsRender=true;
   if(returnMotion){
     returnMotion.time+=dt;globeTime+=dt;
     if(returnMotion.time>=returnMotion.globeDuration+1.57){returnMotion=null;active=false;cycleTime=0;lastHitView=null;}
@@ -593,7 +640,7 @@ hideControl.addEventListener('change',()=>{menu.style.pointerEvents=hideControl.
 document.querySelector('#capture-plate').addEventListener('click',()=>{const a=document.createElement('a');a.href=window.SIDEBAR_STUDY.capture({hideSign:true});a.download='town-clean-plate-v10.png';a.click();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')close();});
 document.addEventListener('visibilitychange',run);reduced.addEventListener('change',()=>{if(reduced.matches)autoControl.checked=false;run();});
-addEventListener('pagehide',e=>{cancelAnimationFrame(raf);portalVideo?.pause();townFilm?.setPlaying(false);if(e.persisted)return;loadSerial++;resizeObserver?.disconnect();townFilm?.dispose();sky?.dispose();footing?.dispose();reflections?.dispose();traffic?.dispose();environment?.dispose();resources.forEach(r=>r.dispose());renderer?.dispose();if(portalUrl)URL.revokeObjectURL(portalUrl);});
+addEventListener('pagehide',e=>{cancelAnimationFrame(raf);portalVideo?.pause();townFilm?.setPlaying(false);if(e.persisted)return;loadSerial++;resizeObserver?.disconnect();townFilm?.dispose();sky?.dispose();footing?.dispose();reflections?.dispose();traffic?.dispose();ambient?.dispose();environment?.dispose();resources.forEach(r=>r.dispose());renderer?.dispose();if(portalUrl)URL.revokeObjectURL(portalUrl);});
 addEventListener('pageshow',e=>{if(e.persisted){resize();run();}});
 window.SIDEBAR_STUDY={
   getPortalBounds:()=>{
@@ -608,6 +655,7 @@ window.SIDEBAR_STUDY={
     gears:rotors.map(r=>r.object.rotation.z),windmill:fan?.rotation.z,rearWindmill:rearFan?.rotation.z,motorY:motorMount?.position.y,motorScale:motorMount?.scale.toArray(),
     settings:{...settings},autoCycle:autoControl.checked,cinema:cinema.getState(),schedule:schedule(),rendering:!!raf,width:menu.getBoundingClientRect().width,signBounds,traffic:traffic?.getState(),environment:environment?.getState(),
     camera:camera?.isPerspectiveCamera?{position:camera.position.toArray(),matrix:camera.matrixWorld.toArray(),projection:camera.projectionMatrix.toArray(),aspect:camera.aspect,view:camera.view?{...camera.view}:null}:null,sky:sky?.getState(),film:townFilm?.getState(),footing:footing?.getState(),sceneMotion:sceneMotion.checked,embeddedMenu,parentVisible,backdrop:backdropControl.value,attachment:embeddedMenu?'native-town-v13':'school-life-v11'}),
+  ambient:{trigger:(k,at)=>{ambient?.trigger(k,at);run();},state:()=>ambient?.getState()},
   cinema:{shots:()=>cinema.SHOTS,still:(n,u)=>cinema.still(n,u),tour:()=>{cinema.tour();run();},release:()=>cinema.release(),arrive:()=>{cinema.arrive();run();}},
   capture:({hideSign=false,hideTraffic=false,greenSky=false,width=1800,height=1200}={})=>{
     const size=renderer.getSize(new THREE.Vector2()),ratio=renderer.getPixelRatio();
@@ -633,10 +681,10 @@ const cinema=(()=>{
     school:[[508,358,2.2],[503.5,352.8,2.5],[494,339,4.4],[492.5,337.5,4.1]],
     factory:[[340,548,5],[334,552,5.5],[287,522,11],[286,522,10.5]],
     airport:[[154,300,2.0],[156,303.5,2.4],[150,326,2.4],[150.5,326,2.3]],
-    ufo:[[782,238,8],[775,242,8.5],[814,176,33],[814,174,38]],
-    home:[[534,476,1.8],[536,473,2.0],[541,455,3.4],[541,455,3.2]]
+    ufo:[[782,238,8],[775,242,8.5],[814,176,33],[814,174,38]]
+    // the boy's home goes here once it's built: by the water tower (HOME / WATER, 814,178)
   };
-  const TOUR=['school','factory','airport','ufo','home'],SHOT_LEN=6.4,IDLE_START=22;
+  const TOUR=['school','factory','airport','ufo'],SHOT_LEN=6.4,IDLE_START=22;
   let mode=null,shot=null,t=0,idle=0,index=0,base=null,fade=null,ufo=null,pending=null,fadeT=0;
   const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
   const at=(p)=>{const h=environment.terrainHeight(p[0],p[1]);return environment.toWorld([p[0],p[1],h+p[2]]);};

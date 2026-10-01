@@ -1,13 +1,9 @@
 // Prepared by: Codex. All visible mechanism parts share this scene and light rig.
 // The original SVG stays usable until this renderer and its artwork are ready.
 import * as THREE from '../../store-book/assets/three.module.js';
-import { createTownEnvironment } from './town-environment.js?v=11';
-import { createTownTraffic } from './town-traffic.js?v=9';
-import { createTownSky } from './town-sky.js?v=11b';
 import { createTownLoop } from './town-loop.js?v=school-life-11';
 import { createSignFooting } from './sign-footing.js?v=11';
 import { createPortalReflections } from './portal-reflections.js?v=11';
-import { createMenuAmbient } from './menu-ambient.js?v=1';
 
 const menu = document.querySelector('.drawn-menu');
 const svg = menu.querySelector('svg');
@@ -27,6 +23,8 @@ const labels = {menu:'Menu ready · move close to keep it open',waiting:'Cursor 
 const textureLoader = new THREE.TextureLoader();
 const textures = new Map();
 const rotors = [], bands = [], cleats = [], resources = new Set();
+const bandGlowU=[],bandHover=[0,0,0,0,0],bandKick=[-9,-9,-9,-9,-9];   // per band: its glow uniform, how lit it is, when it was last nudged
+let hoverBand=-1,uiTime=0,glint=null;
 const reflectiveRims=[];
 const togaCentre = Math.PI/2 - Math.PI*2*.5874895465458243;
 const togaOnly = { value: 0 }, globeLongitude={value:0};
@@ -34,13 +32,18 @@ const letteringYaw={value:0},energyTime={value:0},energyAmount={value:0};
 let renderer, scene, camera, assembly, globe, globeMaterial, beltCurve, beltLength, fan, rearFan;
 let studioCamera, townCamera, signRoot, environment, cameraRig, motorMount, sunDirection;
 let signBounds=null, cleanPlate=false;
-let traffic,ambient,worldTime=0;
+let traffic=null,worldTime=0;
+// the town behind the sign is the opening's own town, drawn by its own engine on the canvas underneath (../town/town-engine.js)
+const MT=window.__MENU_TOWN||null;
 let sky,skyScene,townFilm,footing,reflections,captureSource=false,filmChoiceMade=false;
 let ready=false, phase='menu', kind='earth', cycleTime=0, active=false, manualIdle=false;
 let driveDistance=0, globeTime=0, paused=false, last=0, raf=0, hoverMenu=false, skipHold=false, textureReady=false, autoStarted=false;
 let error='', loadSerial=0, resizeObserver, needsRender=true;
 let returnMotion=null,nearPointer=false,pointerX=null,pointerY=null,lastHitView=null;
 const originalHitPaths=links.map(a=>a.querySelector('.hit').getAttribute('d'));
+// the band under the pointer (or keyboard focus) lights up and gives a nudge
+links.forEach((a,i)=>{const on=()=>{if(hoverBand!==i){hoverBand=i;bandKick[i]=uiTime;}run();},off=()=>{if(hoverBand===i)hoverBand=-1;};
+  a.addEventListener('pointerenter',on);a.addEventListener('focus',on);a.addEventListener('pointerleave',off);a.addEventListener('blur',off);});
 let portalVideo,portalUrl,portalTexture,portalLogo,post,sparks,portalPlaybackError='';
 const townControl=document.querySelector('#town-scene');
 const hideControl=document.querySelector('#hide-sign');
@@ -73,6 +76,16 @@ if(embeddedMenu){
 }
 
 function own(resource) { resources.add(resource); return resource; }
+// the town is cel-shaded, so the sign is too: its light falls into three flat tones and a hot highlight (before tone mapping)
+function celShade(root){
+  const done=new Set();
+  root.traverse(o=>{const m=o.material;if(!m||!m.isMeshStandardMaterial||done.has(m)||m.userData.cel)return;done.add(m);m.userData.cel=true;
+    const prev=m.onBeforeCompile,prevKey=m.customProgramCacheKey.call(m);
+    m.onBeforeCompile=(s,r)=>{prev?.call(m,s,r);s.fragmentShader=s.fragmentShader.replace('#include <opaque_fragment>',`{float l=max(max(outgoingLight.r,outgoingLight.g),outgoingLight.b)+1e-4;
+      float b=.1+.24*smoothstep(.14,.18,l)+.38*smoothstep(.45,.51,l)+.42*smoothstep(1.,1.08,l);outgoingLight*=mix(1.,b/l,.68);}
+      #include <opaque_fragment>`);};
+    m.customProgramCacheKey=()=>'cel|'+prevKey;m.needsUpdate=true;});
+}
 function metal(colour, roughness = .52, metalness = .48) {
   return own(new THREE.MeshStandardMaterial({ color: colour, roughness, metalness }));
 }
@@ -121,10 +134,10 @@ async function svgTexture(source) {
 async function letteringTexture() {
   const ns='http://www.w3.org/2000/svg';
   const art=document.createElementNS(ns,'svg');
-  for(const [name,value]of Object.entries({xmlns:ns,width:1536,height:1536,viewBox:'34 27 260 260'}))art.setAttribute(name,value);
+  for(const [name,value]of Object.entries({xmlns:ns,width:2048,height:2048,viewBox:'34 27 260 260'}))art.setAttribute(name,value);
   const defs=svg.querySelector('defs').cloneNode(true);defs.querySelectorAll('image').forEach(e=>e.remove());art.append(defs);
   const style=document.createElementNS(ns,'style');
-  style.textContent='.hit{fill:none;stroke:none}.choices text{fill:#160b06;font:700 31px Georgia,serif;text-anchor:middle;letter-spacing:.35px}.choices .intro-label{font-size:26px}.engraving{fill:none;stroke:#6b422d;stroke-width:1.15}';art.append(style);
+  style.textContent='.hit{fill:none;stroke:none}.choices text{fill:#ffeab0;stroke:#1d2433;stroke-width:3.6px;stroke-linejoin:round;paint-order:stroke;font:700 33px Georgia,"Times New Roman",serif;text-anchor:middle;letter-spacing:.9px}.choices .intro-label{font-size:28px}.engraving{fill:none;stroke:#3a2416;stroke-width:1.3}';art.append(style);
   art.append(svg.querySelector('.choices').cloneNode(true));
   return svgTexture(new XMLSerializer().serializeToString(art));
 }
@@ -240,7 +253,7 @@ function makeMountAndMotor(copper,dark,logo){
 const seams=[[78.5,.00285],[130,.00255],[183,.00305],[235,.004]];
 function makeSchoolSign(){
   // The school's name now stands on the lawn as a brick monument sign (school-district.js); the old wall plate is retired.
-  if(environment.district)return;
+  if(environment.district||environment.frameOnly)return;
   // A provisional entrance nameplate, not a fabricated school crest.
   const canvas=document.createElement('canvas');canvas.width=1024;canvas.height=224;
   const c=canvas.getContext('2d');c.fillStyle='#d2c3a4';c.fillRect(0,0,1024,224);
@@ -268,19 +281,23 @@ function shellPatch(index){
   const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geometry.setAttribute('normal',new THREE.Float32BufferAttribute(normals,3));geometry.setAttribute('uv',new THREE.Float32BufferAttribute(positions.flatMap((v,i)=>i%3===2?[]:[v/260+.5]),2));geometry.setIndex(indices);return geometry;
 }
 function makeShell(texture,copper) {
-  const material=metal(0xc99567,.54,.44);material.side=THREE.DoubleSide;material.map=texture;
-  material.onBeforeCompile=s=>{
-    s.uniforms.letteringYaw=letteringYaw;
-    s.vertexShader='varying vec3 shellPoint;\n'+s.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nshellPoint=position;');
-    s.fragmentShader='varying vec3 shellPoint; uniform float letteringYaw;\n'+s.fragmentShader.replace('#include <map_fragment>',`vec2 facePoint=vec2(shellPoint.x*cos(letteringYaw)+shellPoint.z*sin(letteringYaw),shellPoint.y);
-      vec4 ink=texture2D(map,facePoint/260.+.5);
-      diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.012,.006,.003),ink.a);
-      diffuseColor.a=1.;`);
-  };
+  // the lettering is gold inlay with a navy ink line; a pointed-at band lights its letters and rim
+  const bandMaterial=glow=>{const material=metal(0xc99567,.54,.44);material.side=THREE.DoubleSide;material.map=texture;
+    material.onBeforeCompile=s=>{
+      s.uniforms.letteringYaw=letteringYaw;s.uniforms.bandGlow=glow;
+      s.vertexShader='varying vec3 shellPoint;\n'+s.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nshellPoint=position;');
+      s.fragmentShader='varying vec3 shellPoint; uniform float letteringYaw, bandGlow;\n'+s.fragmentShader.replace('#include <map_fragment>',`vec2 facePoint=vec2(shellPoint.x*cos(letteringYaw)+shellPoint.z*sin(letteringYaw),shellPoint.y);
+        vec4 ink=texture2D(map,facePoint/260.+.5);
+        diffuseColor.rgb=mix(diffuseColor.rgb,ink.rgb,ink.a);
+        diffuseColor.a=1.;`).replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
+        totalEmissiveRadiance+=vec3(1.,.72,.3)*bandGlow*(ink.a*smoothstep(.55,.9,ink.r)*1.6+.16);`);
+    };
+    material.customProgramCacheKey=()=>'band-glow-1';return material;};
   // Curved cut lines follow the authored menu, not unrelated latitude stripes.
   for(let i=0;i<5;i++){
     const group=new THREE.Group();assembly.add(group);group.position.set(164,-157,0);
-    const geometry=shellPatch(i);mesh(geometry,material,group);
+    const glow={value:0};bandGlowU.push(glow);
+    const geometry=shellPatch(i);mesh(geometry,bandMaterial(glow),group);
     // A real inner copper wall remains visible while a band is edge-on.
     const inside=mesh(geometry,copper,group);inside.scale.setScalar(.984);inside.material.side=THREE.DoubleSide;
     for(const boundary of [i-1,i]){
@@ -292,6 +309,18 @@ function makeShell(texture,copper) {
   }
   // Play's bearing is beneath the face and outside the complete shell sweep.
   const playRing=gear(164,61,35,28,-169,copper,30);playRing.sign=1;
+}
+/* The sign stands in the opening's town. That town is drawn underneath by its own engine; here only its frame is needed:
+   town metres (x east, y south, z up) to the sign's world (x east, y up, z south), centred on the camera, on the town's ground. */
+function makeTownFrame(){
+  const base=MT?.base||{pos:[497,374,1.9],look:[420,337,4.6],fov:54},ground=(x,y)=>MT?.ground?MT.ground(x,y):0,g0=ground(base.pos[0],base.pos[1]);
+  const group=new THREE.Group();group.name='Town frame (drawn by the town engine underneath)';scene.add(group);
+  return {base,group,frameOnly:true,
+    toWorld:p=>new THREE.Vector3(p[0]-base.pos[0],ground(p[0],p[1])-g0+(p[2]||0),p[1]-base.pos[1]),
+    toSource:v=>[v.x+base.pos[0],v.z+base.pos[1],0],
+    terrainHeight:(x,y)=>ground(x,y)-g0,
+    getState:()=>({frameOnly:true,base,townEngine:MT?.state?.()||null}),
+    dispose(){group.removeFromParent();}};
 }
 async function prepare() {
   const request=++loadSerial;
@@ -320,33 +349,29 @@ async function prepare() {
   makeMountAndMotor(copper,dark,emblem);
   reflections=createPortalReflections(THREE,renderer,{portalTexture,intensity:.82,refreshHz:8,resolution:64});
   reflections.attach([...reflectiveRims,...bands]);
+  glint=new THREE.PointLight(0xfff0cc,0,0,2);assembly.add(glint);
+  celShade(assembly);
   // Rear drive plane clears the full 146-unit sweep. One side gear peeks out.
   axle(274,268,-172,40,5,dark);gear(274,268,24,18,-169,copper).sign=1;
   const train=[[298,226,24,20,-1],[318,177,29,24,1],[318,124,24,20,-1],[307,75,26,22,1],[283,42,15,16,-1],[312,10,28,24,1]];
   for(const [x,y,r,t,sign]of train){axle(x,y,-181,y<50?-6:-157,4,dark);const g=gear(x,y,r,t,-169,dark);g.sign=sign;g.offset=.04;}
   // Crown-side medium gear and small idler. All teeth clear the turning bands.
   gear(312,10,28,24,-14,copper).sign=1;gear(283,42,15,16,-14,copper).sign=-1;
-  environment=await createTownEnvironment(THREE,scene);
-  makeSchoolSign();
-  traffic=createTownTraffic(THREE,environment);
-  ambient=createMenuAmbient(THREE,environment);
-  environment.group.traverse(o=>{if(o.material?.map){o.material.map.anisotropy=renderer.capabilities.getMaxAnisotropy();o.material.map.needsUpdate=true;}});
-  townCamera=new THREE.PerspectiveCamera(54,1.5,.05,150000);
-  townCamera.position.copy(environment.toWorld([518,397,3.1]));
-  townCamera.lookAt(environment.toWorld([503,235,3.7]));
+  environment=makeTownFrame();
+  townCamera=new THREE.PerspectiveCamera(environment.base.fov||54,1.5,.05,150000);
+  townCamera.position.copy(environment.toWorld(environment.base.pos));
+  townCamera.lookAt(environment.toWorld(environment.base.look));
   townCamera.updateMatrixWorld(true);
-  skyScene=new THREE.Scene();sky=createTownSky(THREE,townCamera);skyScene.add(sky.group);
   const forward=new THREE.Vector3();townCamera.getWorldDirection(forward);
   const right=new THREE.Vector3().crossVectors(forward,townCamera.up).normalize();
-  const signAnchor=townCamera.position.clone().addScaledVector(forward,10.5).addScaledVector(right,-3.1);
-  signAnchor.y=environment.terrainHeight(signAnchor.x,-signAnchor.z);
+  const signAnchor=townCamera.position.clone().addScaledVector(forward,11.6).addScaledVector(right,-3.3);
+  signAnchor.y=environment.toWorld(environment.toSource(signAnchor)).y;   // stood on the town's ground right there
   cameraRig={anchor:signAnchor,yaw:Math.atan2(townCamera.position.x-signAnchor.x,townCamera.position.z-signAnchor.z)};
   footing=createSignFooting(THREE);scene.add(footing.group);
   for(const light of [key,fill,edge]){
     const direction=light.position.clone().normalize().applyAxisAngle(new THREE.Vector3(0,1,0),cameraRig.yaw);light.position.copy(signAnchor).addScaledVector(direction,80);light.target.position.copy(signAnchor);scene.add(light.target);
   }
   sunDirection=key.position.clone().sub(key.target.position).normalize();
-  sky.setOptions({sunDirection:sunDirection.toArray()});
   renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
   key.castShadow=true;key.shadow.mapSize.set(1024,1024);Object.assign(key.shadow.camera,{left:-8,right:8,top:8,bottom:-8,near:1,far:150});key.shadow.bias=-.0004;
   assembly.traverse(o=>{if(o.isMesh&&!o.material.transparent){o.castShadow=true;o.receiveShadow=true;}});
@@ -377,7 +402,7 @@ function updateFilmControls(){
   backdropControl.querySelector('[value="film"]').disabled=!state?.ready||!!state?.error;
   if(embeddedMenu)backdropControl.value='native';
   else if(state?.ready&&!state.error&&!filmChoiceMade){backdropControl.value='film';filmChoiceMade=true;}
-  if(embeddedMenu&&ready&&!hostNotified){hostNotified=true;parent.postMessage({type:'spirit-menu-ready'},location.origin);}
+  if(embeddedMenu&&ready&&(!MT||MT.ready||MT.failed)&&!hostNotified){hostNotified=true;parent.postMessage({type:'spirit-menu-ready'},location.origin);}
   if(state?.error&&backdropControl.value==='film')backdropControl.value='native';
   greenControl.disabled=!ready||!townControl.checked;
   filmTimeline.disabled=!filmActive();
@@ -437,7 +462,6 @@ function renderFrame(){
     if(greenControl.checked)renderer.setClearColor(0x00ff00,1);
     else renderer.setClearColor(0x000000,0);
     renderer.clear();
-    if(!greenControl.checked){sky.update(worldTime);renderer.render(skyScene,townCamera);}
     if(film){townFilm.setGreen(greenControl.checked);townFilm.render(renderer);environment.group.visible=false;}
     renderer.clearDepth();
   }
@@ -507,6 +531,15 @@ function pose(){
     globe.rotation.y=r.globe+(r.globeTarget-r.globe)*smooth(r.time/Math.max(.001,r.globeDuration));
     bands.forEach((b,i)=>{const from=r.bands[i],to=from<.001?0:Math.PI*2;b.rotation.y=from+(to-from)*smooth((r.time-r.globeDuration-i*.08)/1.25);});
   }
+  // a pointed-at band lifts a hair, lights its letters and gives a little mechanical nudge; at rest the bands tick
+  // through a settling ripple every few seconds, top to bottom, like a clock catching its escapement
+  const resting=!active&&!returnMotion,tick=uiTime%7.5;
+  bands.forEach((b,i)=>{
+    const k=uiTime-bandKick[i],nudge=k>0&&k<1.6?Math.sin(k*17)*Math.exp(-k*4.2)*.07:0;
+    const r=tick-1.2-i*.11,ripple=resting&&!reduced.matches&&r>0&&r<1.4?Math.sin(r*14)*Math.exp(-r*5)*.022:0;
+    b.rotation.y+=nudge+ripple;b.scale.setScalar(1+.02*bandHover[i]);bandGlowU[i].value=bandHover[i];
+  });
+  if(glint){const g=(uiTime%9.5)/2.4;glint.position.set(-60+Math.min(1,g)*460,-40-Math.min(1,g)*60,190);glint.intensity=g<1&&resting&&!reduced.matches?Math.sin(g*Math.PI)*2.4:0;}   // a slow glint across the copper
   // Rotate source geography without ever showing the unfinished hemisphere.
   const travel=globeTime;
   const worldAngle=kind==='toga'?togaCentre+.24*Math.sin(travel*.48):-.7+travel*.3;
@@ -557,7 +590,7 @@ function updateSignPlacement(){
 }
 function setTownScene(){
   if(!camera)return;const town=townControl.checked;document.body.classList.toggle('town-view',town);post.visible=town;environment.group.visible=town;
-  camera=town?townCamera:studioCamera;scene.background=town?new THREE.Color(0xbec8c4):null;
+  camera=town?townCamera:studioCamera;scene.background=null;MT?.setPaused(!town);
   hideControl.disabled=!town;document.querySelector('#capture-plate').disabled=!town;
   scene.getObjectByName('sign-ground-shadow').visible=town;
   if(town)svg.setAttribute('preserveAspectRatio','none');else svg.removeAttribute('preserveAspectRatio');
@@ -578,9 +611,10 @@ function updateProximity(){
   if(hoverMenu&&autoControl.checked&&!paused)returnToMenu();
 }
 function advance(dt){
+  uiTime+=dt;bandHover.forEach((v,i)=>{bandHover[i]+=((i===hoverBand&&!active&&!returnMotion?1:0)-v)*Math.min(1,dt*9);});
   cinema.update(dt);
-  if(scenePlaying()){worldTime+=dt;traffic?.update(worldTime);}
-  if(ambient?.update(dt,scenePlaying()&&!cinema.getState().mode))needsRender=true;
+  if(scenePlaying())worldTime+=dt;
+  MT?.setResting(townControl.checked&&scenePlaying()&&!cinema.getState().mode);
   if(returnMotion){
     returnMotion.time+=dt;globeTime+=dt;
     if(returnMotion.time>=returnMotion.globeDuration+1.57){returnMotion=null;active=false;cycleTime=0;lastHitView=null;}
@@ -595,7 +629,7 @@ function advance(dt){
   pose();
 }
 function tick(now){raf=0;const dt=Math.max(0,(now-last)/1000);last=now;if(!paused&&visibleFrame())advance(dt);if(ready&&!paused&&visibleFrame()&&animationWanted())raf=requestAnimationFrame(tick);}
-function run(){cancelAnimationFrame(raf);last=performance.now();raf=0;townFilm?.setPlaying(filmActive()&&!paused&&visibleFrame()&&scenePlaying());if(portalVideo){if(!paused&&visibleFrame()&&(active||idleAllowed()))portalVideo.play().then(()=>{portalPlaybackError='';}).catch(e=>{portalPlaybackError=e.message;});else portalVideo.pause();}if(ready&&visibleFrame()){if(needsRender)pose();if(!paused)raf=requestAnimationFrame(tick);}}
+function run(){cancelAnimationFrame(raf);last=performance.now();raf=0;MT?.setPaused(!(visibleFrame()&&townControl.checked));townFilm?.setPlaying(filmActive()&&!paused&&visibleFrame()&&scenePlaying());if(portalVideo){if(!paused&&visibleFrame()&&(active||idleAllowed()))portalVideo.play().then(()=>{portalPlaybackError='';}).catch(e=>{portalPlaybackError=e.message;});else portalVideo.pause();}if(ready&&visibleFrame()){if(needsRender)pose();if(!paused)raf=requestAnimationFrame(tick);}}
 function fallback(message){
   loadSerial++;cancelAnimationFrame(raf);raf=0;ready=false;active=false;phase='menu';portalVideo?.pause();
   document.body.classList.remove('town-view');menu.classList.remove('scene-ready','study-open');menu.style.pointerEvents='';svg.removeAttribute('preserveAspectRatio');
@@ -640,7 +674,7 @@ hideControl.addEventListener('change',()=>{menu.style.pointerEvents=hideControl.
 document.querySelector('#capture-plate').addEventListener('click',()=>{const a=document.createElement('a');a.href=window.SIDEBAR_STUDY.capture({hideSign:true});a.download='town-clean-plate-v10.png';a.click();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')close();});
 document.addEventListener('visibilitychange',run);reduced.addEventListener('change',()=>{if(reduced.matches)autoControl.checked=false;run();});
-addEventListener('pagehide',e=>{cancelAnimationFrame(raf);portalVideo?.pause();townFilm?.setPlaying(false);if(e.persisted)return;loadSerial++;resizeObserver?.disconnect();townFilm?.dispose();sky?.dispose();footing?.dispose();reflections?.dispose();traffic?.dispose();ambient?.dispose();environment?.dispose();resources.forEach(r=>r.dispose());renderer?.dispose();if(portalUrl)URL.revokeObjectURL(portalUrl);});
+addEventListener('pagehide',e=>{cancelAnimationFrame(raf);portalVideo?.pause();townFilm?.setPlaying(false);if(e.persisted)return;loadSerial++;resizeObserver?.disconnect();townFilm?.dispose();sky?.dispose();footing?.dispose();reflections?.dispose();environment?.dispose();resources.forEach(r=>r.dispose());renderer?.dispose();if(portalUrl)URL.revokeObjectURL(portalUrl);});
 addEventListener('pageshow',e=>{if(e.persisted){resize();run();}});
 window.SIDEBAR_STUDY={
   getPortalBounds:()=>{
@@ -655,98 +689,94 @@ window.SIDEBAR_STUDY={
     gears:rotors.map(r=>r.object.rotation.z),windmill:fan?.rotation.z,rearWindmill:rearFan?.rotation.z,motorY:motorMount?.position.y,motorScale:motorMount?.scale.toArray(),
     settings:{...settings},autoCycle:autoControl.checked,cinema:cinema.getState(),schedule:schedule(),rendering:!!raf,width:menu.getBoundingClientRect().width,signBounds,traffic:traffic?.getState(),environment:environment?.getState(),
     camera:camera?.isPerspectiveCamera?{position:camera.position.toArray(),matrix:camera.matrixWorld.toArray(),projection:camera.projectionMatrix.toArray(),aspect:camera.aspect,view:camera.view?{...camera.view}:null}:null,sky:sky?.getState(),film:townFilm?.getState(),footing:footing?.getState(),sceneMotion:sceneMotion.checked,embeddedMenu,parentVisible,backdrop:backdropControl.value,attachment:embeddedMenu?'native-town-v13':'school-life-v11'}),
-  ambient:{trigger:(k,at)=>{ambient?.trigger(k,at);run();},state:()=>ambient?.getState()},
+  ambient:{trigger:(k,at)=>{MT?.trigger(k,at);run();},state:()=>MT?.state()},
   cinema:{shots:()=>cinema.SHOTS,still:(n,u)=>cinema.still(n,u),tour:()=>{cinema.tour();run();},release:()=>cinema.release(),arrive:()=>{cinema.arrive();run();}},
   capture:({hideSign=false,hideTraffic=false,greenSky=false,width=1800,height=1200}={})=>{
     const size=renderer.getSize(new THREE.Vector2()),ratio=renderer.getPixelRatio();
-    const background=scene.background,trafficVisible=traffic.group.visible;
+    const background=scene.background,trafficVisible=traffic?.group.visible;
     try{
       cleanPlate=hideSign;captureSource=greenSky;
-      if(hideTraffic)traffic.group.visible=false;
+      if(hideTraffic&&traffic)traffic.group.visible=false;
       if(greenSky)scene.background=new THREE.Color(0x00ff00);
       renderer.setPixelRatio(1);renderer.setSize(width,height,false);pose();
       return renderer.domElement.toDataURL('image/png');
     }finally{
-      scene.background=background;traffic.group.visible=trafficVisible;cleanPlate=false;captureSource=false;
+      scene.background=background;if(traffic)traffic.group.visible=trafficVisible;cleanPlate=false;captureSource=false;
       renderer.setPixelRatio(ratio);renderer.setSize(size.x,size.y,false);pose();
     }
   }
 };
 /* ---------- the menu at rest: little tours of the town when nobody's touching it, and the arrival from the intro ----------
-   After a while idle, the view fades across a few places in the town (the school's front, the factory, the airfield, the water tower
-   with something hovering beside it, the kid's house), then comes back to the sign. Any touch, click or key brings it straight back. */
+   The camera belongs to the town engine underneath; during a tour or the arrival the sign steps out of the picture and the
+   town's camera moves alone. After a while idle, the view fades across a few places (the school's front, the factory, the
+   Blackbird on the airfield, the water tower with something hovering beside it), then comes back to the sign.
+   Any touch, click or key brings it straight back. */
 const cinema=(()=>{
-  // [camera from, camera to, look from, look to]: source units (x east, y south) and height above the ground
+  // [camera from, camera to, look from, look to]: town metres (x east, y south) and height above the ground there
   const SHOTS={
-    school:[[508,358,2.2],[503.5,352.8,2.5],[494,339,4.4],[492.5,337.5,4.1]],
+    school:[[505,357.5,1.8],[502,353.5,2.0],[493,336,3.6],[493.5,336.5,3.4]],
     factory:[[340,548,5],[334,552,5.5],[287,522,11],[286,522,10.5]],
     airport:[[154,300,2.0],[156,303.5,2.4],[150,326,2.4],[150.5,326,2.3]],
     ufo:[[782,238,8],[775,242,8.5],[814,176,33],[814,174,38]]
     // the boy's home goes here once it's built: by the water tower (HOME / WATER, 814,178)
   };
   const TOUR=['school','factory','airport','ufo'],SHOT_LEN=6.4,IDLE_START=22;
-  let mode=null,shot=null,t=0,idle=0,index=0,base=null,fade=null,ufo=null,pending=null,fadeT=0;
+  let mode=null,shot=null,t=0,idle=0,index=0,fade=null,pending=null,fadeT=0;
   const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
-  const at=(p)=>{const h=environment.terrainHeight(p[0],p[1]);return environment.toWorld([p[0],p[1],h+p[2]]);};
+  const mix3=(a,b,e)=>a.map((v,i)=>v+(b[i]-v)*e);
   function fadeTo(v){if(!fade){fade=document.createElement('div');Object.assign(fade.style,{position:'fixed',inset:'0',background:'#000',opacity:'0',pointerEvents:'none',transition:'opacity .45s ease',zIndex:'40'});document.body.appendChild(fade);}fade.style.opacity=String(v);}
-  function saveBase(){if(!base&&townCamera)base={p:townCamera.position.clone(),q:townCamera.quaternion.clone(),fov:townCamera.fov};townCamera.clearViewOffset();const sz=renderer.getSize(new THREE.Vector2());townCamera.aspect=sz.x/Math.max(1,sz.y);menu.style.pointerEvents='none';}
-  function restore(){if(!base)return;townCamera.position.copy(base.p);townCamera.quaternion.copy(base.q);townCamera.fov=base.fov;townCamera.updateMatrixWorld(true);base=null;if(ufo)ufo.visible=false;
-    menu.style.pointerEvents=hideControl.checked?'none':'';resize();}
+  // the sign steps out while the town's camera wanders, and back in when it returns
+  function signShown(on){if(!renderer)return;const c=renderer.domElement;c.style.transition='opacity .4s ease';c.style.opacity=on?'1':'0';menu.style.pointerEvents=on?(hideControl.checked?'none':''):'none';}
   // a tall phone screen keeps the same shot by opening the lens until the width fits
-  const lens=v=>{const a=townCamera.aspect,h=2*Math.atan(Math.tan(v*Math.PI/360)*Math.max(a,.8));return Math.max(v,2*Math.atan(Math.tan(h/2)/a)*180/Math.PI);};
-  function place(name,u){const S=SHOTS[name],e=u*u*(3-2*u)*.6+u*.4;townCamera.position.copy(at(S[0]).lerp(at(S[1]),e));townCamera.lookAt(at(S[2]).lerp(at(S[3]),e));townCamera.fov=lens(name==='school'?44:48);townCamera.updateProjectionMatrix();townCamera.updateMatrixWorld(true);}
-  function makeUfo(){
-    const g=new THREE.Group(),prof=[[0,-6],[16,-5],[30,-1.5],[34,0],[30,2.2],[18,5],[10,6.5],[0,7]].map(([x,y])=>new THREE.Vector2(x,y));
-    g.add(new THREE.Mesh(new THREE.LatheGeometry(prof,40),new THREE.MeshStandardMaterial({color:0xd4dade,metalness:.25,roughness:.35,emissive:0x2a3036})));
-    const dome=new THREE.Mesh(new THREE.SphereGeometry(11,24,12,0,Math.PI*2,0,Math.PI/2),new THREE.MeshStandardMaterial({color:0x9fe3f0,emissive:0x5fb8c8,emissiveIntensity:.8,roughness:.2}));dome.position.y=5.5;g.add(dome);
-    g.userData.lights=[];for(let k=0;k<12;k++){const a=k/12*Math.PI*2,m=new THREE.Mesh(new THREE.SphereGeometry(1.6,8,6),new THREE.MeshBasicMaterial({color:k%2?0xffd86a:0x8ff0c8}));m.position.set(Math.cos(a)*31,.6,Math.sin(a)*31);g.add(m);g.userData.lights.push(m);}
-    g.scale.setScalar(.16);g.visible=false;scene.add(g);return g;
-  }
-  function startShot(name){shot=name;t=0;if(name==='ufo'){ufo||(ufo=makeUfo());ufo.visible=true;}else if(ufo)ufo.visible=false;}
+  const lens=v=>{const a=innerWidth/Math.max(1,innerHeight),h=2*Math.atan(Math.tan(v*Math.PI/360)*Math.max(a,.8));return Math.max(v,2*Math.atan(Math.tan(h/2)/a)*180/Math.PI);};
+  const send=(pos,look,fov,view=null)=>MT?.setCamera({pos,look,fov,view});
+  function sendBase(){if(!townCamera||!environment)return;const v=townCamera.view;send(environment.base.pos,environment.base.look,townCamera.fov,v&&v.enabled?{fullWidth:v.fullWidth,fullHeight:v.fullHeight,offsetX:v.offsetX,offsetY:v.offsetY,width:v.width,height:v.height}:null);}
+  function place(name,u){const S=SHOTS[name],e=u*u*(3-2*u)*.6+u*.4;send(mix3(S[0],S[1],e),mix3(S[2],S[3],e),lens(name==='school'?44:48));}
+  function startShot(name){shot=name;t=0;if(name==='ufo')MT?.ufoShot?.([816,184],42,SHOT_LEN);}
+  function finishTour(){mode=null;shot=null;idle=0;sendBase();signShown(true);needsRender=true;}
   function stop(){if(!mode)return;pending=null;fadeTo(1);mode='leaving';fadeT=0;}
   function userActive(){idle=0;if(mode==='tour'||mode==='arrival')stop();}
   for(const type of ['pointerdown','keydown','wheel','touchstart'])addEventListener(type,userActive,{passive:true});
   addEventListener('pointermove',e=>{if(Math.abs(e.movementX)+Math.abs(e.movementY)>2)userActive();},{passive:true});
   return {
     busy:()=>!!mode||(!reducedMotion.matches&&idleAllowed()),
-    arrive(){if(!townCamera||!environment)return;saveBase();mode='arrival';startShot('school');t=0;place('school',0);needsRender=true;},
+    sendBase,
+    arrive(){if(!MT||!townCamera)return;signShown(false);mode='arrival';startShot('school');place('school',0);},
     update(dt){
-      if(!townCamera||!environment||!townControl.checked)return;
+      if(!MT||!townCamera||!townControl.checked)return;
       dt=Math.min(dt,.05);   // a slow frame never skips a shot
       if(mode==='arrival'){
         t+=dt;
         const HOLD=4.6,GLIDE=2.4;
         if(t<HOLD)place('school',Math.min(1,t/7));
         else{ // glide from the school's front back to the sign
-          const u=Math.min(1,(t-HOLD)/GLIDE),e=u*u*u*(u*(u*6-15)+10),S=SHOTS.school,u0=HOLD/7,k=u0*u0*(3-2*u0)*.6+u0*.4,from=at(S[0]).lerp(at(S[1]),k),look=at(S[2]).lerp(at(S[3]),k);
-          const bl=new THREE.Vector3(0,0,-1).applyQuaternion(base.q).multiplyScalar(40).add(base.p),f0=lens(44);
-          townCamera.position.copy(from.lerp(base.p,e));townCamera.lookAt(look.lerp(bl,e));townCamera.fov=f0+(base.fov-f0)*e;townCamera.updateProjectionMatrix();townCamera.updateMatrixWorld(true);
-          if(u>=1){mode=null;shot=null;restore();idle=0;}
+          const u=Math.min(1,(t-HOLD)/GLIDE),e=u*u*u*(u*(u*6-15)+10),S=SHOTS.school,u0=HOLD/7,k=u0*u0*(3-2*u0)*.6+u0*.4,f0=lens(44),B=environment.base;
+          send(mix3(mix3(S[0],S[1],k),B.pos,e),mix3(mix3(S[2],S[3],k),B.look,e),f0+(townCamera.fov-f0)*e);
+          if(u>=1)finishTour();
         }
-        needsRender=true;return;
+        return;
       }
-      if(mode==='leaving'){fadeT+=dt;if(fadeT>.5){restore();mode=null;shot=null;idle=0;fadeTo(0);}needsRender=true;return;}
-      if(mode==='still'){needsRender=true;return;}
+      if(mode==='leaving'){fadeT+=dt;if(fadeT>.5){finishTour();fadeTo(0);}return;}
+      if(mode==='still')return;
       if(mode==='tour'){
         t+=dt;
         if(pending){fadeT+=dt;if(fadeT>.5){startShot(pending);pending=null;fadeTo(0);}}
         else if(t>SHOT_LEN-.5&&t<SHOT_LEN){ /* about to change: fade out */ if(fade?.style.opacity!=='1')fadeTo(1);}
         else if(t>=SHOT_LEN){index++;if(index>=TOUR.length){mode='leaving';fadeT=.5;return;}pending=TOUR[index];fadeT=.5;t=0;}
-        if(shot){place(shot,Math.min(1,t/SHOT_LEN));
-          if(shot==='ufo'&&ufo){const u=t/SHOT_LEN,zip=Math.max(0,(u-.72)/.28),p=at([806+zip*zip*80,168-zip*zip*60,40+Math.sin(t*1.6)*1.2+zip*zip*140]);ufo.position.copy(p);ufo.rotation.y=t*1.5;ufo.userData.lights.forEach((m,k)=>m.material.color.set(Math.floor(t*6+k)%3===0?0xffd86a:0x8ff0c8));}}
-        needsRender=true;return;
+        if(shot)place(shot,Math.min(1,t/SHOT_LEN));
+        return;
       }
+      sendBase();   // at rest: the town's camera is the sign's
       // idle: nobody has touched anything for a while (the sign's own turning doesn't count)
       if(reducedMotion.matches||hoverMenu||!ready||!visibleFrame()){idle=0;return;}
       idle+=dt;
-      if(idle>IDLE_START){saveBase();mode='tour';index=0;t=0;shot=null;pending=TOUR[0];fadeT=0;fadeTo(1);}
+      if(idle>IDLE_START){signShown(false);mode='tour';index=0;t=0;shot=null;pending=TOUR[0];fadeT=0;fadeTo(1);}
     },
     SHOTS,getState:()=>({mode,shot,idle,t}),
     // for checking the framing: hold one shot at a point along its move
-    still(name,u=.5){if(!SHOTS[name])return;saveBase();mode='still';startShot(name);place(name,u);
-      if(name==='ufo'&&ufo){ufo.position.copy(at([806,168,40]));}needsRender=true;run();},
+    still(name,u=.5){if(!SHOTS[name])return;signShown(false);mode='still';startShot(name);place(name,u);needsRender=true;run();},
     tour(){idle=IDLE_START+1;},
-    release(){if(mode==='still'){mode=null;shot=null;restore();needsRender=true;run();}}
+    release(){if(mode==='still'){finishTour();run();}}
   };
 })();
 earthButton.disabled=togaButton.disabled=true;

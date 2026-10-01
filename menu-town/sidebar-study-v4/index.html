@@ -7,11 +7,23 @@
   <title>Spirit Striker · Sidebar motion study</title>
   <link rel="stylesheet" href="menu-base.css">
   <script>if(new URLSearchParams(location.search).get('embed')==='main-menu'&&parent!==window)document.documentElement.classList.add('main-menu-embed');</script>
-  <link rel="stylesheet" href="study.css?v=native-town-13">
-  <script type="module" src="mechanism-3d.js?v=native-town-16"></script>
+  <link rel="stylesheet" href="study.css?v=opening-town-1">
+  <!-- The town behind the sign: the opening's own engine and town (built by build_menu_town.py), drawn on #menu-town-c. -->
+  <script>
+    window.__MENU_TOWN={canvas:'menu-town-c',
+      // the menu's view, in town metres (x east, y south, z above the ground): from the desert lot, west down the street, the school on the right
+      base:{pos:[497,374,2.7],look:[420,337,6.2],fov:54},
+      clear:[[490,366,26]],                                                  // no street lamps standing in the view
+      scrubArea:{n:520,x0:452,x1:504,y0:364,y1:430,road:5.5,keep:[[485.6,372.8,3.4]]}};   // desert scrub on the lot; clear where the sign stands
+    window.__MENU_TOWN.pos=window.__MENU_TOWN.base.pos;window.__MENU_TOWN.look=window.__MENU_TOWN.base.look;
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
+  <script src="../town/town-engine.js?v=2" defer></script>
+  <script type="module" src="mechanism-3d.js?v=opening-town-1"></script>
 </head>
 <body>
   <main>
+    <canvas id="menu-town-c" class="menu-town-canvas" aria-hidden="true"></canvas>
     <h1 class="study-heading">Spirit Striker</h1>
     <nav class="drawn-menu" aria-label="Main menu">
       <svg viewBox="-16 -156 386 724" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="Spirit Striker engraved nameplate and curved menu choices">

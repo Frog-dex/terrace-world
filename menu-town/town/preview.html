@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Menu town preview</title>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}canvas{display:block;width:100%;height:100%}</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// a bare view of the menu's town; ?cam=x,y,z,lx,ly,lz&fov=54 sets the camera (town metres, z above the ground)
+const q = new URLSearchParams(location.search), c = q.get('cam');
+window.__MENU_TOWN = { canvas: 'c', clear: [[490, 366, 26]], scrubArea:{n:520,x0:452,x1:504,y0:364,y1:430,road:5.5,keep:[[486.2,372.2,3.2]]}, ...(c ? { pos: c.split(',').slice(0, 3).map(Number), look: c.split(',').slice(3).map(Number) } : {}), ...(q.get('fov') ? { fov: +q.get('fov') } : {}) };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="town-engine.js"></script>
+</body>
+</html>

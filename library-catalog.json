@@ -1,0 +1,157 @@
+{
+  "version": 1,
+  "prepared_by": "Codex",
+  "book_reader_origin": "https://spiritstriker.app",
+  "books": [
+    {
+      "title": "Merchant Coast — Concept Pack v4",
+      "pdf": "books/merchant-coast-concept-pack-v4.pdf",
+      "cover": "library-assets/merchant-coast.jpg",
+      "locked": false
+    },
+    {
+      "title": "Dreamer Frog — Art Book",
+      "pdf": "books/dreamer-frog-art-book.pdf",
+      "cover": "library-assets/artbook.jpg",
+      "locked": false
+    },
+    {
+      "title": "Dreamer Frog — Founders Edition Poster Book",
+      "pdf": "books/dreamer-frog-illustrated.pdf",
+      "cover": "library-assets/dreamer-frog-illustrated-page-1.jpg",
+      "locked": false
+    },
+    {
+      "title": "Spirit Strikers — Image Catalog",
+      "pdf": "books/spirit-strikers-image-catalog.pdf",
+      "cover": "library-assets/spirits-poems.jpg",
+      "locked": false
+    },
+    {
+      "title": "Dreamer Frog — Compendium of Toga",
+      "pdf": "books/dreamer-frog-compendium.pdf",
+      "cover": "library-assets/dreamer-frog.jpg",
+      "locked": false
+    },
+    {
+      "title": "Dreamer Frog — Short Book",
+      "pdf": "books/dreamer-frog-book-short.pdf",
+      "cover": "library-assets/dreamer-blueprint.jpg",
+      "locked": false
+    },
+    {
+      "title": "Dreamer Frog — Manuscript (30k)",
+      "pdf": "books/dreamer-frog-30k-manuscript.pdf",
+      "cover": "library-assets/dreamer-manuscript.jpg",
+      "locked": false
+    },
+    {
+      "title": "AI Telepathy — Full Edition",
+      "pdf": "books/ai-telepathy-full-edition.pdf",
+      "cover": "library-assets/ai-telepathy-full.jpg",
+      "locked": false
+    },
+    {
+      "title": "AI Telepathy — How It Fixes Everything",
+      "pdf": "books/ai-telepathy-how-it-fixes-everything.pdf",
+      "cover": "library-assets/ai-telepathy-fixes.jpg",
+      "locked": false
+    },
+    {
+      "title": "Custom Cards",
+      "pdf": "books/custom-cards.pdf",
+      "cover": "library-assets/custom-cards.jpg",
+      "locked": false
+    },
+    {
+      "title": "The Illuminated Deck of Toga",
+      "pdf": "books/toga-coloring-deck.pdf",
+      "cover": "library-assets/toga-coloring-deck-page-1.jpg",
+      "locked": false
+    },
+    {
+      "title": "Living Design",
+      "pdf": "books/living-design.pdf",
+      "cover": "library-assets/living-design.jpg",
+      "locked": false
+    },
+    {
+      "title": "Cycle of the Galaxy — The Book of Toga",
+      "pdf": "books/toga-cycle-of-the-galaxy.pdf",
+      "cover": "library-assets/toga-cycle.jpg",
+      "locked": false
+    },
+    {
+      "title": "The Legal Corpus — The Law of Toga",
+      "pdf": "books/toga-legal-corpus.pdf",
+      "cover": "library-assets/toga-legal.jpg",
+      "locked": true
+    },
+    {
+      "title": "TOGA Certificates",
+      "pdf": "books/toga-certificates.pdf",
+      "cover": "library-assets/toga-certificates-page-1.jpg",
+      "locked": false
+    },
+    {
+      "title": "Citizen Kit — of the Toga Republic",
+      "pdf": "books/toga-citizen-kit.pdf",
+      "cover": "library-assets/toga-citizen.jpg",
+      "locked": true
+    }
+  ],
+  "software": [
+    {
+      "title": "Plan & Code",
+      "id": "plan-and-code",
+      "description": "Website blueprint and Observatory floor plan.",
+      "source": "https://github.com/Frog-dex/plan-and-code",
+      "launches": [
+        {
+          "title": "Site Blueprint",
+          "url": "https://spiritstriker.app/blueprint.html"
+        },
+        {
+          "title": "Observatory Floor Plan",
+          "url": "https://spiritstriker.app/plan.html"
+        }
+      ]
+    },
+    {
+      "title": "Krita Agent",
+      "id": "krita-agent",
+      "description": "Source for the Krita art tool.",
+      "source": "https://github.com/Frog-dex/krita-agent",
+      "launches": []
+    },
+    {
+      "title": "Card Forge",
+      "id": "card-forge",
+      "description": "Source for the card-making tool; public editor is not hosted.",
+      "source": "https://github.com/Frog-dex/card-forge",
+      "launches": []
+    }
+  ],
+  "projects": [
+    {
+      "title": "Terrace World",
+      "description": "This GitHub Pages game build",
+      "url": "terrace-world.html"
+    },
+    {
+      "title": "Site Blueprint",
+      "description": "Website planner",
+      "url": "https://spiritstriker.app/blueprint.html"
+    },
+    {
+      "title": "Observatory Floor Plan",
+      "description": "World planner",
+      "url": "https://frog-dex.github.io/observatory-planner/"
+    },
+    {
+      "title": "Original CD machine",
+      "description": "Three-dimensional software case collection",
+      "url": "https://spiritstriker.app/software.html"
+    }
+  ]
+}

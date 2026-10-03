@@ -146,7 +146,7 @@
 
   function openPage(link) {
     if(!link)return;
-    if(link.dataset.destination!=='play'&&link.dataset.destination!=='intro')return; // Public GitHub copy: other sections stay closed.
+    if(!['play','intro','learn'].includes(link.dataset.destination))return; // The GitHub Library is live; other sections stay closed.
     if(link.dataset.destination==='radio'){location.href=RADIO_SITE;return;}
     sourceLink = link;
     pendingDestination = link.dataset.destination;

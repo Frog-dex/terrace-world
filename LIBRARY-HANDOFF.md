@@ -10,7 +10,7 @@ The target is `https://frog-dex.github.io/terrace-world/library.html` in this re
 
 ## Book reading
 
-Thirteen books open the published reader at `https://spiritstriker.app/flipbook.html` with a `pdf` query pointing to the published PDF on that domain. No PDFs are duplicated here. The reader is embedded inside this GitHub page and offers a full-page escape link. The two progression-locked books (Legal Corpus and Citizen Kit) send readers to the original Library so its read-to-unlock chain remains authoritative. The Cycle of the Galaxy is the first chain book and may open directly. Progress and unlock state on `spiritstriker.app` do not synchronize to this GitHub origin. Before changing this, inspect the original rule in `/Users/blu/gm-site/library-source.html` and its storage keys. Do not claim shared progress until it is implemented and tested.
+Fourteen books open the published reader at `https://spiritstriker.app/flipbook.html` with a `pdf` query pointing to the published PDF on that domain. No PDFs are duplicated here. The reader is embedded inside this GitHub page and offers a full-page escape link. The two progression-locked books (Legal Corpus and Citizen Kit) send readers to the original Library so its read-to-unlock chain remains authoritative. The Cycle of the Galaxy is the first chain book and may open directly. Progress and unlock state on `spiritstriker.app` do not synchronize to this GitHub origin. Before changing this, inspect the original rule in `/Users/blu/gm-site/library-source.html` and its storage keys. Do not claim shared progress until it is implemented and tested.
 
 ## Software
 

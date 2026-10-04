@@ -88,6 +88,13 @@ input[type=text]{font:inherit;font-size:14px;width:110px;border:2px solid var(--
 .wdbg{position:fixed;left:calc(8px + env(safe-area-inset-left,0px));top:calc(96px + env(safe-area-inset-top,0px));z-index:31;width:min(348px,calc(100vw - 16px));max-height:calc(100vh - 236px);overflow:auto;box-sizing:border-box;
   font:500 11.5px/1.4 ui-monospace,Menlo,Consolas,monospace;color:#e9eef7;background:rgba(20,22,52,.88);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border:2.5px solid #2b2466;border-radius:10px;box-shadow:0 0 0 1.5px #e9b949;padding:9px 11px 11px;font-variant-numeric:tabular-nums}
 .wdbg[hidden]{display:none}
+.dbgBtn{position:fixed;left:50%;top:calc(88px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:30;font:700 10.5px/1 ui-monospace,Menlo,monospace;color:#f2d27a;background:rgba(29,36,51,.78);border:1.5px solid rgba(242,210,122,.6);border-radius:7px;padding:6px 9px;cursor:pointer;white-space:nowrap;letter-spacing:.04em}
+.dbgBtn[hidden]{display:none}
+.dbgBtn:hover,.dbgBtn:focus-visible{border-color:#f2d27a;background:rgba(43,36,102,.92);outline:none}
+.dbgBtn[aria-pressed="true"]{background:#f2d27a;color:#2b2466;border-color:#f2d27a}
+.dbgBtn kbd{font:inherit;opacity:.75;margin-left:6px}
+body.twhud .dbgBtn{top:auto;left:auto;transform:none;right:10px;bottom:calc(var(--twBotH,132px) + 32px + env(safe-area-inset-bottom,0px))}
+body.twFight .dbgBtn{display:none}
 .wdbg h3{margin:0 0 7px;font:700 13px/1.2 ui-monospace,Menlo,monospace;color:#f2d27a;letter-spacing:.08em;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center}
 .wdbg h4{margin:11px 0 3px;font:700 10.5px/1.2 ui-monospace,Menlo,monospace;color:#f2d27a;letter-spacing:.1em;text-transform:uppercase}
 .wdbg .r{display:flex;justify-content:space-between;gap:10px}.wdbg .r>span{color:#a6b4d4}.wdbg .r>b{font-weight:600;text-align:right}
@@ -466,8 +473,9 @@ body.twhud .bpanel .bmoves{border-top:2px solid #d9cdb0!important}
 <div class="lowVign" id="lowVign" aria-hidden="true"></div>
 
 <div class="perf" id="perf" aria-hidden="true">FPS --</div>
+<button class="dbgBtn" id="dbgBtn" type="button" aria-pressed="false" title="World debug: what is in the ground, the creeks and ponds, the ore view (Shift+D)">World debug<kbd>Shift+D</kbd></button>
 <aside class="wdbg" id="wdbg" hidden aria-label="World debug">
-  <h3>World debug <button id="wdbgX" aria-label="Close the world debug panel">close</button></h3>
+  <h3>World debug <button id="wdbgX" aria-label="Close the world debug panel" title="Shift+D">close</button></h3>
   <div class="bt"><button id="wdbgOre" aria-pressed="false">Ore view</button><button id="wdbgDepth">4 ft deep</button><button id="wdbgPit">Cut a test pit</button></div>
   <div class="bt"><button id="wdbgCreek">Go to a creek</button><button id="wdbgPond">Go to a pond</button></div>
   <div id="wdbgBody"></div>
@@ -576,7 +584,7 @@ body.twhud .bpanel .bmoves{border-top:2px solid #d9cdb0!important}
   <label class="chk">Grass <select id="grassSel"><option value="mix">Mostly soft mounds (default)</option></select></label>
   <label class="chk">Graphics <select id="gfxSel"><option value="auto">Auto (keeps it smooth)</option><option value="high">Sharp</option><option value="low">Light (older computers)</option></select></label>
   <label class="chk"><input type="checkbox" id="perfOn" checked> Show the performance readout</label>
-  <label class="chk"><input type="checkbox" id="dbgOn"> World debug: what is in the ground, the creeks and ponds, the ore view (or press the ` key)</label>
+  <label class="chk"><input type="checkbox" id="dbgOn"> World debug: what is in the ground, the creeks and ponds, the ore view (or press Shift+D, or the button above the FPS line)</label>
   <label class="chk">Weather <select id="wxSel"><option value="auto">Changes on its own</option><option value="clear">Clear</option><option value="fair">Some clouds</option><option value="overcast">Overcast</option><option value="windy">Windy</option><option value="rain">Rain</option></select></label>
   <label class="chk"><input type="checkbox" id="devMode"> Dev mode: craft everything instantly, free</label>
   <label class="chk"><input type="checkbox" id="curveOn"> Curved screen (test): the world bends like curved glass, the UI stays flat. Strongest on a wide screen, off on phones</label>
@@ -4968,7 +4976,7 @@ addEventListener('keydown', e => {
   if (k === 'escape' && !$('bag').hidden) closeBag();
   if (k === 'v') setCam(cam.mode === 'close' ? 'overview' : 'close');
   if (k === 'e') useKey();
-  if (e.key === '`') dbgToggle();
+  if (e.key === '`' || (e.shiftKey && k === 'd')){ keys.delete('d'); if (!e.repeat) dbgToggle(); }
 });
 addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
 addEventListener('blur', () => keys.clear());
@@ -5632,7 +5640,7 @@ function applyGfx(){
   if (sun.shadow.map){ sun.shadow.map.dispose(); sun.shadow.map = null; }
 }
 document.getElementById('gfxSel').onchange = e => { GFX.mode = e.target.value; applyGfx(); };
-document.getElementById('perfOn').onchange = e => { document.getElementById('perf').hidden = !e.target.checked; };
+document.getElementById('perfOn').onchange = e => { document.getElementById('perf').hidden = !e.target.checked; document.getElementById('dbgBtn').hidden = !e.target.checked; };
 // Auto: when frames drop below ~45 a second the picture renders a little softer, and sharpens again once there is room
 function gfxAuto(fps){
   if (GFX.mode !== 'auto') return;
@@ -5662,7 +5670,7 @@ const DBG = { on: false, ore: false, depth: 4, due: 0, oreAt: null, pit: null, m
 const DBG_R = 26, DBG_MAX = 6000, DBG_DIR = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const dbgEl = document.getElementById('wdbg'), dbgDir = (dx, dz) => DBG_DIR[(Math.round(Math.atan2(dx, -dz)/(Math.PI/4)) + 8) % 8];
 function dbgToggle(v){
-  DBG.on = v === undefined ? !DBG.on : !!v; dbgEl.hidden = !DBG.on; document.getElementById('dbgOn').checked = DBG.on; DBG.due = 0; DBG.oreAt = null;
+  DBG.on = v === undefined ? !DBG.on : !!v; dbgEl.hidden = !DBG.on; document.getElementById('dbgOn').checked = DBG.on; document.getElementById('dbgBtn').setAttribute('aria-pressed', DBG.on); DBG.due = 0; DBG.oreAt = null;
   if (!DBG.on && DBG.mesh) DBG.mesh.m.count = DBG.mesh.o.count = 0;
 }
 function dbgOreMesh(){
@@ -5750,6 +5758,7 @@ function dbgFrame(now){
 }
 document.getElementById('dbgOn').onchange = e => dbgToggle(e.target.checked);
 document.getElementById('wdbgX').onclick = () => dbgToggle(false);
+document.getElementById('dbgBtn').onclick = e => { dbgToggle(); e.currentTarget.blur(); };            // (blur: the keys go back to the game)
 document.getElementById('wdbgOre').onclick = e => { DBG.ore = !DBG.ore; e.currentTarget.setAttribute('aria-pressed', DBG.ore); dbgOre(); DBG.due = 0; };
 document.getElementById('wdbgDepth').onclick = e => { DBG.depth = DBG.depth === 2 ? 4 : DBG.depth === 4 ? 8 : 2; e.currentTarget.textContent = DBG.depth + ' ft deep'; DBG.oreAt = null; DBG.due = 0; };
 document.getElementById('wdbgPit').onclick = () => { toast(dbgPit()); if (DBG.ore) dbgOre(); };

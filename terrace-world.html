@@ -2737,6 +2737,7 @@ const canvas = document.getElementById('world');
 let renderer;
 try { renderer = new THREE.WebGLRenderer({ canvas, antialias:true }); }
 catch(e){ document.getElementById('err').style.display = 'grid'; return; }
+renderer.debug.checkShaderErrors = !!navigator.webdriver || /[?&]shaders=1/.test(location.search);            // (v122) asking the card for every new shader's log stops the game until it answers. It is only needed to report a broken shader: on under test automation and with ?shaders=1, off in play
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); renderer.info.autoReset = false;   // the perf readout counts a whole frame, shadows included   // sharp enough, and far lighter on a retina screen
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;           // filtered, clean edges instead of stair-stepped ones
@@ -7242,11 +7243,11 @@ function applyGfx(){
 document.getElementById('gfxSel').onchange = e => { GFX.mode = e.target.value; applyGfx(); };
 document.getElementById('perfOn').onchange = e => { document.getElementById('perf').hidden = !e.target.checked; document.getElementById('dbgBtn').hidden = !e.target.checked; };
 // Auto: when frames drop below ~45 a second the picture renders a little softer, and sharpens again once there is room
-function gfxAuto(fps){
-  if (GFX.mode !== 'auto') return;
-  if (fps < 45){ GFX.fast = 0; if (++GFX.slow >= 3 && GFX.pr > 0.7){ setPR(Math.max(0.7, GFX.pr - 0.15)); GFX.slow = 0; } }
-  else if (fps > 58){ GFX.slow = 0; if (++GFX.fast >= 8 && GFX.pr < GFX.maxPR){ setPR(Math.min(GFX.maxPR, GFX.pr + 0.1)); GFX.fast = 0; } }
-  else { GFX.slow = GFX.fast = 0; }
+function gfxAuto(fps){            // (v122) it went down after 1.5 s of slow frames and back up after 4 s of fast ones: while she walked it flipped every few seconds, and every flip rebuilt the drawing surface (an eighth of a walk's time, and a hitch each). Down as before; back up only after 30 s of fast frames; never twice within 10 s
+  if (GFX.mode !== 'auto') return; const now = performance.now(), settled = now - (GFX.at || -1e9) > 10000;
+  if (fps < 45){ GFX.fast = 0; if (++GFX.slow >= 3 && GFX.pr > 0.7 && settled){ setPR(Math.max(0.7, GFX.pr - 0.15)); GFX.slow = 0; GFX.at = now; } }
+  else if (fps > 58){ GFX.slow = 0; if (++GFX.fast >= 60 && GFX.pr < GFX.maxPR && settled){ setPR(Math.min(GFX.maxPR, GFX.pr + 0.1)); GFX.fast = 0; GFX.at = now; } }
+  else { GFX.slow = 0; GFX.fast = Math.max(0, GFX.fast - 2); }
 }
 function perfTick(now, workMs){
   PERF.n++; PERF.work += workMs; PERF.worst = Math.max(PERF.worst, workMs);
@@ -10099,7 +10100,7 @@ function uiLightFrame(dt){
       if (st === gl.ALREADY_SIGNALED || st === gl.CONDITION_SATISFIED){ gl.deleteSync(uilSync); uilSync = null; if (_row.length < uilW*4) _row = new Uint8Array(uilW*4);
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, uilBuf); gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, _row, 0, uilW*4); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null); take(_row, k => Math.floor((k + .5)/12*uilW)); }
       else if (st === gl.WAIT_FAILED){ gl.deleteSync(uilSync); uilSync = null; } }
-    else if (++uilN % 24 === 0){ const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;      // the light on the UI eases over a third of a second anyway
+    else if (++uilN % 96 === 0){ const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;      // the light on the UI eases over a third of a second anyway (v122, World agent, measured: every 96th frame, not every 24th. Collecting the row still made the game wait about 40 ms each time)
       if (gl.fenceSync){
         if (!uilBuf) uilBuf = gl.createBuffer();
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, uilBuf); gl.bufferData(gl.PIXEL_PACK_BUFFER, w*4, gl.STREAM_READ);      // fresh storage each time, so the last copy is never overwritten

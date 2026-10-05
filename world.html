@@ -414,10 +414,11 @@ html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv .cost em,html body.twhud.
 html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv .cost em{color:#d8c4ff!important}
 /* MOVE TABS (Blu, Oct 4). A box drawn at each end of a move: "make the magic and the strike more clearly. Adding the symbols opposite from each other."
    Then: "separation between each move, paper tabs kind of thing... better light and shadow on the paper, like in real life... a better way to show negative values."
-   Each move is a tab of paper on the sheet: magic at its left end, strike at its right, the name between. Phones keep the sheet as it was. */
+   Each move is a tab of paper on the sheet: magic at its left end, strike at its right, the name between (or above, when the tab is narrow). Phones keep the sheet as it was. */
 @media (min-width: 641px){
-html body.twhud.twP3 #battle.battle .bpanel.bpanel .bmoves.twStd{gap:0 10px!important;padding:5px 4px 7px!important}
-html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost){display:grid!important;grid-template-columns:minmax(46px,auto) minmax(0,1fr) minmax(46px,auto)!important;align-items:center!important;gap:0 4px!important;padding:9px 10px 9px!important;position:relative!important;isolation:isolate;background:transparent!important}
+html body.twhud.twP3 #battle.battle .bpanel.bpanel .bmoves.twStd{gap:0 10px!important;padding:5px 4px 7px!important;container-type:inline-size}
+/* a tab: the name on top, magic under it at the left end, strike at the right end. This is the narrow shape; a wide sheet lays the three in one row (below) */
+html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost){display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;grid-template-areas:"n n" "m s"!important;align-items:center!important;gap:4px 4px!important;padding:7px 9px 7px!important;position:relative!important;isolation:isolate;background:transparent!important;min-width:0!important}
 /* the tab itself: light falls from above and a little from the left, so the top edge is lit, the foot is in shade, and the tab throws a shadow on the sheet */
 html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost)::before{content:'';position:absolute;inset:0;z-index:-1;border-radius:9px 9px 6px 6px;pointer-events:none;
   background:linear-gradient(176deg,#5a50b8 0%,#4a41a4 30%,#3f3792 68%,#352d80 100%);
@@ -426,16 +427,29 @@ html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost)::before{cont
 html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost):hover:not([disabled]){background:transparent!important}
 html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost):hover:not([disabled])::before{background:linear-gradient(176deg,#6a60c8 0%,#564cb2 30%,#4a41a2 68%,#3f3792 100%);box-shadow:0 0 0 1.5px rgba(242,210,122,.85),inset 0 1.5px 0 rgba(255,255,255,.3),inset 0 -4px 6px rgba(14,10,44,.36),0 2.5px 0 rgba(14,10,44,.7),0 6px 9px rgba(8,6,30,.45)}
 html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost) .cost{display:contents!important}
-html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost) b{grid-column:2;grid-row:1}
-html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost) .cost em{grid-column:1;grid-row:1;justify-self:start}
-html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost) .cost i{grid-column:3;grid-row:1;justify-self:end}
-html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost) .cost em,html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost) .cost i{font:700 19px/1 'Baloo 2',sans-serif!important;gap:3px!important;letter-spacing:.01em}
-html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost) .cost svg{width:22px!important;height:22px!important}
+html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost) b{grid-area:n;justify-self:center;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost) .cost em{grid-area:m;justify-self:start}
+html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost) .cost i{grid-area:s;justify-self:end}
+html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost) .cost em,html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost) .cost i{font:700 19px/1 'Baloo 2',sans-serif!important;gap:3px!important;letter-spacing:.01em;white-space:nowrap}
+html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost) .cost svg{width:22px!important;height:22px!important;flex:none}
 html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost) .cost svg path{fill:#bb9dff!important;stroke:#f3ecff!important;stroke-width:1!important}   /* the symbols were dark purple with a navy edge, lost on the navy: the same purple, lighter, with a pale edge */
 /* what a move takes is a minus, in coral; what it gives is a plus, in green */
 html body.twhud.twP3.twFight #battle.battle .bpanel.bpanel .mv:has(> .cost) .cost .neg{color:#ff9f8a!important;text-shadow:0 1px 0 rgba(20,10,40,.55)!important}
 html body.twhud.twP3.twFight #battle.battle .bpanel.bpanel .mv:has(> .cost) .cost .back,html body.twhud.twP3.twFight #battle.battle .bpanel.bpanel .mv:has(> .cost) .cost .free{color:#8fe6aa!important;text-shadow:0 1px 0 rgba(20,10,40,.55)!important}
+/* a very narrow sheet (tabs under about 135 px): the name a size smaller, so the longest one still fits whole */
+@container (max-width: 570px){
+html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost) b{font-size:14px!important}
 }
+/* a wide sheet (each tab about 235 px or more, room for the longest name, Banana Break): one row, magic | name | strike. A name too long for its tab is cut with dots, never laid over the numbers */
+@container (min-width: 980px){
+html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv:has(> .cost){grid-template-columns:minmax(46px,auto) minmax(0,1fr) minmax(46px,auto)!important;grid-template-areas:"m n s"!important;gap:0 4px!important;padding:9px 10px 9px!important}
+}
+}
+/* END MOVE TABS */
+}
+/* END MOVE TABS */
+}
+/* END MOVE TABS */
 @media (max-width: 640px){ html body.twhud.twP3 #battle.battle .bcard.bcard .nm{font-size:10.5px!important} html body.twhud.twP3 #battle.battle .bcard.bcard .nm b{font-size:12.5px!important}
   html body.twhud.twP3 #battle.battle .bcard.bcard .tchip{font-size:8.5px!important;padding:1px 6px 1px 3px!important;transform:scale(.9);transform-origin:0 50%}
   html body.twhud.twP3 #battle.battle .bpanel.bpanel .bmsg{font-size:15px!important;padding:6px 4px 4px!important} html body.twhud.twP3 #battle.battle .bpanel.bpanel .mv b{font-size:13.5px!important}

@@ -2482,8 +2482,9 @@ const crownGeo = fuzzyCrownGeo();
 const pools = { trunk: makePool(trunkGeo, 900, false, barkMat), crown: makePool(crownGeo, 1100, true, leafMat), tier: makePool(coneGeo, 1600, true, leafMat), melon: makePool(crownGeo.clone(), 80, true, melonMat) };
 pools.crownLo = makePool(fuzzyCrownGeo(9, 6), 1100, true, leafMat);      // the world's trees (Lane A): the same soft crown with fewer corners
 /* (v116) a conifer's bough for the Toga world: blunt and rounded, a little lumpy, closed underneath (she looks up into it). One unit wide and tall, standing on y = 0 like the cone it replaces */
-const boughGeo = (() => { const g = new THREE.LatheGeometry([[0, 0.07], [0.6, 0], [1, 0.17], [0.95, 0.38], [0.7, 0.68], [0.38, 0.9], [0, 1]].map(p => new THREE.Vector2(p[0], p[1])), 9), p = g.attributes.position;
-  for (let i=0;i<p.count;i++){ const x = p.getX(i), y = p.getY(i), z = p.getZ(i), k = 1 + 0.07*Math.sin(Math.atan2(z, x)*3 + y*5.1) + 0.05*Math.sin(Math.atan2(z, x)*5 - y*7.3); p.setXYZ(i, x*k, y, z*k); }
+const boughGeo = (() => {            // (v117) two layers of drooping branches in one piece: a wide soft rim, a waist, a smaller rim, then in to a slim soft tip
+  const g = new THREE.LatheGeometry([[0, 0.14], [0.7, 0.03], [0.95, 0], [1, 0.07], [0.84, 0.2], [0.52, 0.4], [0.7, 0.455], [0.75, 0.5], [0.44, 0.74], [0.14, 0.95], [0, 1]].map(p => new THREE.Vector2(p[0], p[1])), 8), p = g.attributes.position;
+  for (let i=0;i<p.count;i++){ const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(z, x), edge = 1 - y*0.6, k = 1 + edge*(0.1*Math.sin(a*3 + y*5.1) + 0.07*Math.sin(a*5 - y*7.3)), dy = y < 0.6 ? 0.035*Math.sin(a*2 + 1.3)*Math.hypot(x, z) : 0; p.setXYZ(i, x*k, y + dy, z*k); }      // (a ragged edge, more at the rims than at the tip; one side hangs a little lower)
   g.computeVertexNormals(); return g; })();
 pools.bough = makePool(boughGeo, 1500, true, leafMat);
 const _M = new THREE.Matrix4(), _F = new THREE.Matrix4(), _T = new THREE.Matrix4(), _Q = new THREE.Quaternion(), _S = new THREE.Vector3(), _P = new THREE.Vector3(), _E = new THREE.Euler(), _C = new THREE.Color(), _A = new THREE.Vector3();
@@ -3554,19 +3555,19 @@ const FOREST = (typeof World !== 'undefined' && World.biomes.forest) || { perChu
 const TRUNK_R = { fir: 0.0125, hemlock: 0.011, cedar: 0.02, pine: 0.04, maple: 0.032, alder: 0.014, oak: 0.045, arbutus: 0.026 };            // a grown trunk's thickness, as a share of the tree's height (a 200 ft fir: about 4 ft through)
 function treeForm(shape, rr, tint, young, put, big){            // big: an old-growth tree, thicker in the trunk
   const L = TREE_LOOK[shape], leaf = L.leaf[Math.min(L.leaf.length - 1, Math.floor(tint*L.leaf.length))], tk = L.trunk;
-  const tiers = (bare, w, n, drape, top) => {            // a conifer's crown (v116): n rounded boughs up the trunk, each a little off to one side and of its own size, narrowing only a little to a blunt top
-    const hh = (1 - bare)/n*drape, gap = n > 1 ? (1 - bare - hh)/(n - 1) : 0;
-    for (let q=0;q<n;q++){ const f = n > 1 ? q/(n - 1) : 0, r = w*(1 - (1 - top)*f)*(0.84 + rr()*0.32), a = rr()*6.28, off = w*0.3*rr()*(1 - 0.5*f);
-      put('tier', Math.cos(a)*off, bare + q*gap, Math.sin(a)*off, r, hh*(0.9 + rr()*0.2), r*(0.88 + rr()*0.24), q*1.3 + rr(), leaf, 0.5 + f*0.5); }
+  const tiers = (bare, w, n, drape, top) => {            // a conifer's crown (v117): n flounced boughs up the trunk, layer on layer of drooping branches; each narrower than the one below, and the top one tall and slim, so the tree ends in a soft point
+    const hh = (1 - bare)/n*drape, lh = n > 1 ? hh*1.3 : hh, gap = n > 1 ? (1 - bare - lh)/(n - 1) : 0; let under = 1e9;
+    for (let q=0;q<n;q++){ const f = n > 1 ? q/(n - 1) : 0, tip = n > 1 && q === n - 1, r = Math.min(under*0.94, w*(1 - (1 - top)*f)*(0.9 + rr()*0.2)), a = rr()*6.28, off = w*0.22*rr()*(1 - 0.85*f), tall = 0.92 + rr()*0.16; under = r;
+      put('tier', Math.cos(a)*off, bare + q*gap, Math.sin(a)*off, r, tip ? lh : hh*tall, r*(0.9 + rr()*0.2), q*1.3 + rr(), leaf, 0.5 + f*0.5); }
   };
   const girth = big ? 1.32 : 1;
   if (shape === 'fir'){              // Douglas-fir, grand fir, Sitka spruce: a straight bare column, and a narrow cylindric crown beginning far up it
-    const bare = young ? 0.18 + rr()*0.1 : 0.46 + rr()*0.14, tr = (young ? 0.016 : TRUNK_R.fir)*girth; put('trunk', 0, 0, 0, tr, 0.94, tr, 0, tk, 0.1); tiers(bare, (young ? 0.11 : 0.08) + rr()*0.02, young ? 3 : 4, 1.45, young ? 0.5 : 0.74); }
+    const bare = young ? 0.18 + rr()*0.1 : 0.46 + rr()*0.14, tr = (young ? 0.016 : TRUNK_R.fir)*girth; put('trunk', 0, 0, 0, tr, 0.94, tr, 0, tk, 0.1); tiers(bare, (young ? 0.115 : 0.088) + rr()*0.02, young ? 3 : 4, 1.1, young ? 0.4 : 0.44); }
   else if (shape === 'hemlock'){     // western hemlock: slim and feathery, the tip nodding over
-    const bare = young ? 0.14 + rr()*0.08 : 0.38 + rr()*0.12, tr = (young ? 0.015 : TRUNK_R.hemlock)*girth; put('trunk', 0, 0, 0, tr, 0.92, tr, 0, tk, 0.1); tiers(bare, (young ? 0.1 : 0.072) + rr()*0.018, young ? 3 : 4, 1.6, young ? 0.42 : 0.58);
+    const bare = young ? 0.14 + rr()*0.08 : 0.38 + rr()*0.12, tr = (young ? 0.015 : TRUNK_R.hemlock)*girth; put('trunk', 0, 0, 0, tr, 0.92, tr, 0, tk, 0.1); tiers(bare, (young ? 0.105 : 0.08) + rr()*0.018, young ? 3 : 4, 1.12, young ? 0.36 : 0.4);
     const a = rr()*6.28; put('tier', Math.cos(a)*0.02, 0.925, Math.sin(a)*0.02, 0.026, 0.06, 0.026, 0, leaf, 1.4); }      // (the tip nods over: a small bough off to one side)
   else if (shape === 'cedar'){       // western redcedar: a thick trunk swollen at the foot, the branches sweeping lower than a fir's
-    const bare = young ? 0.08 + rr()*0.06 : 0.22 + rr()*0.14, tr = (young ? 0.022 : TRUNK_R.cedar)*girth; put('trunk', 0, 0, 0, tr*1.9, 0.055, tr*1.9, 0, tk, 0.05); put('trunk', 0, 0, 0, tr, 0.9, tr, 0, tk, 0.1); tiers(bare, 0.105 + rr()*0.025, young ? 3 : 4, 1.45, young ? 0.45 : 0.62); }
+    const bare = young ? 0.08 + rr()*0.06 : 0.22 + rr()*0.14, tr = (young ? 0.022 : TRUNK_R.cedar)*girth; put('trunk', 0, 0, 0, tr*1.9, 0.055, tr*1.9, 0, tk, 0.05); put('trunk', 0, 0, 0, tr, 0.9, tr, 0, tk, 0.1); tiers(bare, 0.112 + rr()*0.025, young ? 3 : 4, 1.1, young ? 0.4 : 0.48); }
   else if (shape === 'pine'){        // shore pine: short and crooked, the needles in flat windswept pads
     const a = rr()*6.28, lx = Math.cos(a), lz = Math.sin(a); put('trunk', 0, 0, 0, 0.04, 0.64, 0.04, 0, tk, 0.2);
     put('crown', lx*0.1, 0.68, lz*0.1, 0.25, 0.13, 0.21, rr()*6.28, leaf, 0.9); put('crown', -lx*0.12, 0.85, -lz*0.12, 0.17, 0.1, 0.15, rr()*6.28, leaf, 1.1);

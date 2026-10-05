@@ -2674,32 +2674,32 @@ function fallMesh(){
     p.setX(i, x*(0.86 + 0.3*d)); p.setZ(i, d*d*0.5 + 0.55*(1 - 4*x*x) - 0.5 - (y > 0.35 ? (y - 0.35)*1.4 : 0)); }      // it curls over the lip, spreads and leans out toward its foot, and its two sides wrap back to the rock
   const U = { uTime: waterU.uTime, uLight: farTreeU.uLight, uFogC: farTreeU.uFogC, uFog: farTreeU.uFog }, H = 'float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233)))*43758.5453); }';
   const mat = new THREE.ShaderMaterial({ uniforms: U, side: THREE.DoubleSide,
-    vertexShader: `varying vec2 vUv; varying float vSeed, vDist;
-      void main(){ vUv = uv; vSeed = instanceMatrix[3].x*0.37 + instanceMatrix[3].z*0.71; vec4 mv = modelViewMatrix*instanceMatrix*vec4(position, 1.0); vDist = -mv.z; gl_Position = projectionMatrix*mv; }`,
-    fragmentShader: `uniform float uTime; uniform vec3 uLight, uFogC; uniform vec2 uFog; varying vec2 vUv; varying float vSeed, vDist;
+    vertexShader: `varying vec2 vUv, vWH; varying float vSeed, vDist;
+      void main(){ vUv = uv; vWH = vec2(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz)); vSeed = instanceMatrix[3].x*0.37 + instanceMatrix[3].z*0.71; vec4 mv = modelViewMatrix*instanceMatrix*vec4(position, 1.0); vDist = -mv.z; gl_Position = projectionMatrix*mv; }`,
+    fragmentShader: `uniform float uTime; uniform vec3 uLight, uFogC; uniform vec2 uFog; varying vec2 vUv, vWH; varying float vSeed, vDist;
       ${H}
       float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0 - 2.0*f); return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); }
-      void main(){ float u = vUv.x, d = 1.0 - vUv.y, wob = 0.5*sin(u*11.0 + vSeed) + 0.3*sin(u*23.0 - vSeed*2.0);
-        float a = vn(vec2(u*17.0 + vSeed, d*1.9 - uTime*1.7 + wob)), b = vn(vec2(u*31.0 - vSeed, d*4.2 - uTime*2.9 + wob*1.7));      // long soft strands falling, and quick thin ones over them
-        float side = min(u, 1.0 - u), tat = (0.015 + 0.05*vn(vec2(d*7.0 - uTime*2.2, step(0.5, u)*9.0 + vSeed)))*smoothstep(0.02, 0.2, d);      // its two sides hang in tatters
+      void main(){ float u = vUv.x, d = 1.0 - vUv.y, uf = u*vWH.x, df = d*max(vWH.y, 2.0), wob = 0.5*sin(uf*1.7 + vSeed) + 0.3*sin(uf*3.5 - vSeed*2.0);      // (v120) uf, df: feet across it and down it. Its pattern is measured in feet, so a fall 50 ft wide is a wide curtain of the same fine water, not a creek's fall blown up
+        float a = vn(vec2(uf*2.6 + vSeed, df*0.5 - uTime*1.7 + wob)), b = vn(vec2(uf*4.8 - vSeed, df*1.1 - uTime*2.9 + wob*1.7));      // long soft strands falling, and quick thin ones over them
+        float side = min(u, 1.0 - u)*vWH.x, tat = (0.1 + 0.33*vn(vec2(df*1.8 - uTime*2.2, step(0.5, u)*9.0 + vSeed)))*smoothstep(0.02, 0.2, d);      // its two sides hang in tatters (a few inches of them, whatever its width)
         if (side < tat) discard;
         vec3 c = vec3(0.47, 0.75, 0.85); c = mix(c, vec3(0.72, 0.9, 0.94), step(0.46, a)); c = mix(c, vec3(1.0), step(0.66, b)*step(0.38, a));
-        c = mix(c, vec3(1.0), step(vUv.y, 0.15 + 0.12*vn(vec2(u*9.0 + vSeed, uTime*2.5))));      // it breaks white at its foot
+        c = mix(c, vec3(1.0), step(vUv.y*vWH.y, min(vWH.y*0.27, 0.6 + 0.5*vn(vec2(uf*1.4 + vSeed, uTime*2.5)))));      // it breaks white at its foot (the last foot or so of it)
         c = mix(c, vec3(0.93, 0.98, 1.0), smoothstep(0.88, 0.97, vUv.y));                      // and pale where it curls over the lip
         c *= clamp(uLight, 0.0, 1.15);
-        if (side < tat + 0.035) c = vec3(0.169, 0.141, 0.4)*clamp(uLight*1.6, 0.1, 1.0);       // the ink line down its two ragged edges
+        if (side < tat + 0.23) c = vec3(0.169, 0.141, 0.4)*clamp(uLight*1.6, 0.1, 1.0);       // the ink line down its two ragged edges
         gl_FragColor = vec4(mix(c, uFogC, smoothstep(uFog.x, uFog.y, vDist)), 1.0); }` });
   const m = new THREE.InstancedMesh(g, mat, 24); m.frustumCulled = false; m.count = 0; m.renderOrder = 1; scene.add(m);
   /* the foam on the water at its foot ("There's no foaming on the ground"): a white boil where the water lands and rings of
      foam spreading from it, lying on the pool */
   const fg = new THREE.CircleGeometry(1, 28); fg.rotateX(-Math.PI/2);
   const fmat = new THREE.ShaderMaterial({ uniforms: U, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -6,
-    vertexShader: `varying vec2 vP; varying float vSeed, vDist;
-      void main(){ vP = position.xz; vSeed = instanceMatrix[3].x*0.53 + instanceMatrix[3].z*0.29; vec4 mv = modelViewMatrix*instanceMatrix*vec4(position, 1.0); vDist = -mv.z; gl_Position = projectionMatrix*mv; }`,
-    fragmentShader: `uniform float uTime; uniform vec3 uLight, uFogC; uniform vec2 uFog; varying vec2 vP; varying float vSeed, vDist;
-      void main(){ float r = length(vP), an = atan(vP.y, vP.x);
-        float edge = 0.7 + 0.12*sin(an*5.0 + uTime*1.3 + vSeed) + 0.09*sin(an*9.0 - uTime*2.1 + vSeed*2.0);      // a wobbling outline, never a clean circle
-        float boil = step(r, edge*(0.56 + 0.06*sin(uTime*5.0 + an*3.0))), ring = step(r, edge)*step(0.55, fract(r*3.3 - uTime*0.6 + vSeed))*step(edge*0.5, r);
+    vertexShader: `varying vec2 vP, vS; varying float vSeed, vDist;
+      void main(){ vP = position.xz; vS = vec2(length(instanceMatrix[0].xyz), length(instanceMatrix[2].xyz)); vSeed = instanceMatrix[3].x*0.53 + instanceMatrix[3].z*0.29; vec4 mv = modelViewMatrix*instanceMatrix*vec4(position, 1.0); vDist = -mv.z; gl_Position = projectionMatrix*mv; }`,
+    fragmentShader: `uniform float uTime; uniform vec3 uLight, uFogC; uniform vec2 uFog; varying vec2 vP, vS; varying float vSeed, vDist;
+      void main(){ vec2 q = vP*vS; float cap = max(vS.x - vS.y, 0.0), qx = q.x - clamp(q.x, -cap, cap), ft = length(vec2(qx, q.y)), r = ft/vS.y, an = atan(q.y, qx) + q.x*0.13;      // (v120) q: feet from its middle. It is a band along the foot of the fall with round ends; ft: feet from the band's middle line; r: that as a share of its half depth
+        float edge = 0.7 + 0.12*sin(an*5.0 + uTime*1.3 + vSeed) + 0.07*sin(an*9.0 - uTime*2.1 + vSeed*2.0);      // a wobbling outline, never a clean edge (soft scallops a few feet long along the band)
+        float boil = step(r, edge*(0.56 + 0.06*sin(uTime*5.0 + an*3.0))), ring = step(r, edge)*step(0.55, fract(ft*0.62 - uTime*0.6 + vSeed))*step(edge*0.5, r);      // (the rings a foot or two apart, whatever its size)
         if (boil + ring < 0.5) discard;
         vec3 c = mix(vec3(0.82, 0.94, 0.97), vec3(1.0), boil)*clamp(uLight, 0.0, 1.15);
         gl_FragColor = vec4(mix(c, uFogC, smoothstep(uFog.x, uFog.y, vDist)), 1.0); }` });
@@ -2715,7 +2715,7 @@ function buildFalls(){             // the falls in the window, set up again each
     const yaw = Math.atan2(f.dx, f.dz), w = f.wideFt*1.1 + 0.6; let at = 0;
     for (let q = -3; q <= 3; q += 0.25) if (stepAt(x + f.dx*q, z + f.dz*q) <= foot){ at = q; break; }            // where the land actually steps down (the ground is in 2 ft cells): the sheet hangs from there
     _M.compose(_P.set(x + f.dx*(at + 0.9), foot + hh/2, z + f.dz*(at + 0.9)), _Q.setFromEuler(_E.set(0, yaw, 0)), _S.set(w, hh, 1.7)); m.setMatrixAt(n, _M);
-    _M.compose(_P.set(x + f.dx*(at + 2.0), foot + 0.1, z + f.dz*(at + 2.0)), _Q, _S.set(w*0.8 + 1.6, 1, w*0.65 + 1.9)); foam.setMatrixAt(n, _M); n++;
+    _M.compose(_P.set(x + f.dx*(at + 2.0), foot + 0.1, z + f.dz*(at + 2.0)), _Q, _S.set(Math.min(w*0.8 + 1.6, w*0.5 + 4), 1, Math.min(w*0.65 + 1.9, 7))); foam.setMatrixAt(n, _M); n++;
     W.falls.push({ x: x + f.dx*(at + 2.0), z: z + f.dz*(at + 2.0), y: foot, w: f.wideFt, drop: +f.dropFt.toFixed(1), last: 0, dry: f.dry, thr: f.thr || 0 }); }
   W.fallWet = W.falls.filter(f => !f.dry).length; m.count = foam.count = fallsRunning(); m.instanceMatrix.needsUpdate = foam.instanceMatrix.needsUpdate = true;
 }

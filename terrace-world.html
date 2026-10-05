@@ -712,17 +712,22 @@ body.twhud .bpanel .bmoves{border-top:2px solid #d9cdb0!important}
    Blu, 2026-10-04: out of health is a ghost, not dead. The ghost runs on magic. Out of magic,
    the spirit leaves the body: that is dead, and then you reincarnate.
    Blu, 2026-10-05: "add the ghost effect onto the character, like they turn into a [spirit]".
+   Blu, 2026-10-05, the way back: out of magic she "can't fight anymore" and is in "an out-of-body experience, like
+   near death"; she floats ("not like super high"), cannot use her bag, and "you have to manually get back home";
+   there "the character just passes out. Until they get full back to magic again". So 'dead' here means out of
+   the body, not gone: outside a fight it is the spirit the player walks home.
    The form is read from the game's own two numbers, so nothing new is saved:
    health above zero = living · health at zero with magic left = ghost · both empty = dead,
    and dead holds until she is in a body again (health above zero).
    Looks and timings live in data/ghost.json; tools/sync_spirits_module.py inlines this file + that json
    into terrace-world.html between the SPIRITS-GHOST markers. */
 const SpiritsGhost = (() => {
-  const CFG = /*SPIRITS-GHOST-CFG*/{"_source":"Blu, 2026-10-04: out of health is a ghost, not dead. The ghost runs on magic. Out of magic, the spirit leaves the body: dead, then reincarnate. Blu, 2026-10-05: add the ghost effect onto the character, like they turn into a spirit. Starting looks and timings, tune in playtest (B6).","_turn":"seconds: how long the turn plays. buckle: how short she sags before the flash (1 = full height). flashAt: how far through the turn the flash comes (0..1). light: the colour of her light.","_float":"A ghost in a fight. lift and bob are in feet, sway in radians, glow is how bright her light is (0..1), glowSize its width in feet, wisps how many rise off her.","_leave":"Out of magic: how long the spirit takes to leave, and how many feet her light rises.","look":{"ghost":{"tint":[0.62,0.84,1.0],"opacity":0.6},"dead":{"tint":[0.55,0.57,0.66],"opacity":0.45}},"turn":{"seconds":1.9,"buckle":0.55,"flashAt":0.36,"light":"#bfe0ff"},"float":{"lift":0.55,"bob":0.2,"sway":0.06,"glow":0.5,"glowSize":8.5,"wisps":6},"leave":{"seconds":1.8,"rise":7}}/*END-SPIRITS-GHOST-CFG*/ || {
+  const CFG = /*SPIRITS-GHOST-CFG*/{"_source":"Blu, 2026-10-04: out of health is a ghost, not dead. The ghost runs on magic. Out of magic, the spirit leaves the body: dead, then reincarnate. Blu, 2026-10-05: add the ghost effect onto the character, like they turn into a spirit. Starting looks and timings, tune in playtest (B6).","_turn":"seconds: how long the turn plays. buckle: how short she sags before the flash (1 = full height). flashAt: how far through the turn the flash comes (0..1). light: the colour of her light.","_float":"A ghost in a fight. lift and bob are in feet, sway in radians, glow is how bright her light is (0..1), glowSize its width in feet, wisps how many rise off her.","_leave":"Out of magic: how long the spirit takes to leave, and how many feet her light rises.","look":{"ghost":{"tint":[0.62,0.84,1.0],"opacity":0.6},"dead":{"tint":[0.55,0.57,0.66],"opacity":0.45}},"turn":{"seconds":1.9,"buckle":0.55,"flashAt":0.36,"light":"#bfe0ff"},"float":{"lift":0.55,"bob":0.2,"sway":0.06,"glow":0.5,"glowSize":8.5,"wisps":6},"leave":{"seconds":1.8,"rise":7},"_home":"The way back (Blu, Oct 5): she has to get home herself. near: how many feet from the door counts as home. health: how much of her health she comes round with (0..1); her magic comes back full. dim: how much of the low-health closing-in of the screen is left while she is a ghost outside a fight (0 = none, 1 = all of it).","home":{"near":9,"health":0.5,"dim":0.3}}/*END-SPIRITS-GHOST-CFG*/ || {
     look: { ghost: { tint: [0.62, 0.84, 1.0], opacity: 0.6 }, dead: { tint: [0.55, 0.57, 0.66], opacity: 0.45 } },
     turn: { seconds: 1.9, buckle: 0.55, flashAt: 0.36, light: '#bfe0ff' },
     float: { lift: 0.55, bob: 0.2, sway: 0.06, glow: 0.5, glowSize: 8.5, wisps: 6 },
-    leave: { seconds: 1.8, rise: 7 }
+    leave: { seconds: 1.8, rise: 7 },
+    home: { near: 9, health: 0.5, dim: 0.3 }
   };
   let form = 'living';
   const subs = {};
@@ -761,22 +766,27 @@ const SpiritsGhost = (() => {
   let act = null, lastT = 0;
   const ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a)/(b - a))); return t*t*(3 - 2*t); };
   const toward = (v, goal, k) => Math.abs(goal - v) < 0.004 ? goal : v + (goal - v)*k;
-  function ease(){
+  function ease(world){
     const t = performance.now(), dt = lastT ? Math.min(0.1, (t - lastT)/1000) : 0; lastT = t;
     const shown = act && act.type === 'turnGhost' && act.u < CFG.turn.flashAt ? 'living' : form;   // in the turn she is herself until the flash
-    const L = CFG.look[shown] || LIVING, k = 1 - Math.exp(-dt*5), g = shown === 'ghost' ? 1 : 0;
+    // in a fight the body of one who is out of magic lies still; out in the world it is her spirit we see, and it floats
+    const L = CFG.look[shown] || LIVING, k = 1 - Math.exp(-dt*5), g = shown === 'ghost' || (world && shown === 'dead') ? 1 : 0;
     seen.r = toward(seen.r, L.tint[0], k); seen.g = toward(seen.g, L.tint[1], k); seen.b = toward(seen.b, L.tint[2], k);
     seen.o = toward(seen.o, L.opacity, k); seen.up = toward(seen.up, g, k); seen.lit = toward(seen.lit, g, k);
   }
 
   // The game colours its two drawings of her every frame (night, a hit). Call this straight after,
-  // with that drawing's material, and it lays the look over the colour the game just set.
-  function dress(mat){
-    ease();
+  // with that drawing's material, and it lays the look over the colour the game just set. world = her drawing out in the world.
+  // A see-through drawing needs a lower cut-off or it vanishes. three r128 builds the cut-off into the shader, so it only ever
+  // takes two values (whole, and half for any see-through look): two shaders, not one a frame. A look must stay above half its cut.
+  function thin(mat){
     if (mat.userData.ghostCut == null) mat.userData.ghostCut = mat.alphaTest;
-    const thin = seen.o < 0.999, cut = thin ? mat.userData.ghostCut*0.5 : mat.userData.ghostCut;
-    mat.opacity = seen.o; mat.transparent = thin;
-    if (mat.alphaTest !== cut){ mat.alphaTest = cut; mat.needsUpdate = true; }   // three r128 builds the cut-off into the shader: two values only, so two shaders only
+    const cut = seen.o < 0.999 ? mat.userData.ghostCut*0.5 : mat.userData.ghostCut;
+    mat.opacity = seen.o; if (mat.alphaTest !== cut){ mat.alphaTest = cut; mat.needsUpdate = true; }
+  }
+  function dress(mat, world){
+    ease(world);
+    thin(mat); mat.transparent = seen.o < 0.999;
     mat.color.r *= seen.r; mat.color.g *= seen.g; mat.color.b *= seen.b;
   }
 
@@ -801,17 +811,18 @@ const SpiritsGhost = (() => {
     for (let i = 0; i < CFG.float.wisps; i++) s.wisps.push(mk(7, false));
     stages.set(scene, s); return s;
   }
-  // Call each frame of a fight after the game has placed her drawing (and her staff): a ghost floats, sways and glows.
-  // t = the fight's clock in seconds; still = reduced motion (she still lifts and glows, nothing moves).
-  function wear(scene, glowTex, mesh, t, still, staff){
+  // Call each frame after the game has placed her drawing (and, in a fight, her staff): a ghost floats, sways and glows.
+  // t = that scene's clock in seconds; still = reduced motion (she still lifts and glows, nothing moves);
+  // world = her drawing out in the world, where nothing lies down: it is her spirit that is drawn. world.sunk = how many feet
+  // the game has sunk her drawing into water (wading, swimming): a ghost is lifted back out of it, so she floats over water too.
+  function wear(scene, glowTex, mesh, t, still, staff, world){
     const F = CFG.float, s = stage(scene, glowTex), a = act, m = still ? 0 : 1; act = null;
     let lit = seen.lit, size = F.glowSize, rise = 0;
     if (a && a.type === 'turnGhost'){ const f = Math.max(0, 1 - Math.abs(a.u - CFG.turn.flashAt - 0.05)/0.16); lit = Math.max(lit, 1.6*f); size *= 1 + 0.6*f; }
-    if (a && a.type === 'leaveBody'){ rise = CFG.leave.rise*ss(0.1, 1, a.u); lit = 1.8*(1 - ss(0.5, 1, a.u)); size *= 1 - 0.55*a.u; }   // her light draws in, brightens, and goes up and out
-    if (form === 'dead' && !a) mesh.scale.y = 0.05;            // the body stays down once the spirit has left
-    const lift = seen.up*(F.lift + m*F.bob*Math.sin(t*1.8));
+    if (a && a.type === 'leaveBody'){ rise = CFG.leave.rise*ss(0.1, 1, a.u); lit = Math.max(lit, 1.8*ss(0, 0.2, a.u))*(1 - ss(0.5, 1, a.u)); size *= 1 - 0.55*a.u; }   // her light draws in, brightens, and goes up and out
+    const lift = seen.up*(F.lift + m*F.bob*Math.sin(t*1.8) + (world && world.sunk || 0));
     mesh.position.y += lift; mesh.rotation.z = m*seen.up*F.sway*Math.sin(t*1.4);
-    if (staff){ staff.position.y += lift; const sm = staff.userData.m && staff.userData.m.material; if (sm){ sm.color.setRGB(seen.r, seen.g, seen.b); sm.opacity = seen.o; } }
+    if (staff){ staff.position.y += lift; const sm = staff.userData.m && staff.userData.m.material; if (sm){ sm.color.setRGB(seen.r, seen.g, seen.b); thin(sm); } }
     const lightOn = lit > 0.01, p = mesh.position;
     s.glow.visible = lightOn;
     if (lightOn){ s.glow.position.set(p.x, p.y + 2.7 + rise, p.z); s.glow.scale.setScalar(size*(1 + m*0.06*Math.sin(t*2.6))); s.glow.material.opacity = Math.min(1, F.glow*lit); }
@@ -5707,6 +5718,7 @@ const haveCost = k => k === 'dirt' ? (W.dirt || 0) : have(k);
 ui.dev = false;
 const canCraft = r => ui.dev || Object.entries(r.cost).every(([k,v]) => haveCost(k) >= v);
 function craft(r){
+  if (ghostOut()){ ghostNo('make things'); return; }
   if (!canCraft(r)) return;
   if (!ui.dev) for (const [k,v] of Object.entries(r.cost)){ if (k === 'dirt') W.dirt -= v; else takeFrom(W.pack, k, v); }
   const left = addTo(W.pack, r.id, 1), what = r.name;
@@ -6042,6 +6054,7 @@ function renderBag(){
 function clearGhosts(){ document.querySelectorAll('.it.ghost').forEach(e => e.remove()); document.querySelectorAll('.dropMark').forEach(e => e.remove()); if (bagDrag){ bagDrag.el.style.opacity = ''; bagDrag = null; } }
 addEventListener('pointerup', () => { if (bagDrag) setTimeout(() => { if (bagDrag) bagUp(); }, 0); });
 function toggleBag(force){
+  if (ghostOut() && (force === undefined ? $('bag').hidden : force)){ chestIsOpen = false; ghostNo('open the bag'); return; }
   clearGhosts();
   const el = $('bag'), on = force === undefined ? el.hidden : force; el.hidden = !on;
   if (!on){ bagSel = null; holderOpen = null; if (chestIsOpen) chestOpen(false); }
@@ -6077,6 +6090,7 @@ function renderInfo(){
   if (!inside.on && g === W.pack && !it.code && !it.grid) btn('Drop', () => { g.items.splice(g.items.indexOf(it), 1); dropPile(hero.x + 1.2, hero.z + 1.2, [{ id:it.id, n:it.n }]); bagSel = null; hud(); renderBag(); });
 }
 function eatFrom(g, it){
+  if (ghostOut()){ ghostNo('eat'); return; }
   const d = ITEMS[it.id]; it.n--; g.items = g.items.filter(q => q.n > 0);
   const h = Math.min(d.food, player.max - player.hp); player.hp += h; hudHP();
   toast(h > 0 ? `Ate the ${d.name.toLowerCase()}. +${Math.round(h)} health.` : `Ate the ${d.name.toLowerCase()}. Already full of beans.`);
@@ -6910,7 +6924,7 @@ function updateSky(dt){
   if (day < 0.03 && SK.moon.el > 0.02){ sun.color.setHex(0x9db4ff); sun.intensity = moon.intensity; { const sd = W.sw ? 620 : 220; sun.position.set(cam.tx + _moonDir.x*sd, cam.ty + _moonDir.y*sd, cam.tz + _moonDir.z*sd); } moon.intensity = 0; }
   inkNU.value.set(1 - day, SK.moon.lit*(SK.moon.el > 0 ? 1 : 0.35), hero.y, 26);            // the ink line: its blue follows the moon
   if (houseMats.win) houseMats.win.emissiveIntensity = 1.1*(1-day);
-  const lk = 0.5 + 0.5*day; hero.mat.color.setRGB(lk*0.95 + 0.05, lk*0.95 + 0.05, Math.min(1, lk + 0.15)); if (typeof SpiritsGhost !== "undefined") SpiritsGhost.dress(hero.mat);   // the drawing dims at night too
+  const lk = 0.5 + 0.5*day; hero.mat.color.setRGB(lk*0.95 + 0.05, lk*0.95 + 0.05, Math.min(1, lk + 0.15)); if (typeof SpiritsGhost !== "undefined") SpiritsGhost.dress(hero.mat, true);   // the drawing dims at night too
   if (W.lamp) W.lamp.intensity = 1.5*(1-day);
   winMat.color.set('#1f2d52').lerp(_c2.set('#cfeaf2'), day); inLamp.intensity = 0.5 + 0.5*(1-day); inHemi.intensity = 0.3 + 0.3*day; W.day = day;
   const hh = Math.floor(clock.tod), mm = Math.floor((clock.tod-hh)*60);
@@ -7046,6 +7060,7 @@ function worldFrame(dt){
     if (hero.wade > 0.03){ hero.mesh.position.y -= hero.wade; wadeT -= dt;
       if (wadeT <= 0){ const moving = (hero.movedNow || 0) > 0; ripple(hero.x, hero.z, 0.5 + hero.wade*0.35, moving ? 1.1 : 2.0, hero.y + 0.07); wadeT = moving ? 0.3 : 1.2; if (moving && Math.random() < 0.3) puff(hero.x, hero.y + 0.3, hero.z, '#eef8fa', 1); } } }
   hero.mesh.rotation.y = Math.atan2(camera.position.x - hero.x, camera.position.z - hero.z);
+  if (typeof SpiritsGhost !== "undefined") SpiritsGhost.wear(scene, spiritGlowTex, hero.mesh, t, reduceMotion, null, { sunk: (hero.wade || 0) + (hero.swim && !hero.boating ? 3.5 : 0) });
   hero.shadow.position.set(hero.x, hero.y + 0.05, hero.z); hero.shadow.visible = !hero.boating && (dockAt(hero.x,hero.z) || stepAt(hero.x,hero.z) >= TIDE || !wetAt(hero.x,hero.z)); if (hero.wade > 0.2 || hero.jump) hero.shadow.visible = false;
   waterFX(dt);
 
@@ -7075,6 +7090,7 @@ function worldFrame(dt){
 }
 function runPending(){
   const p = hero.pending; hero.pending = null;
+  if (ghostOut() && p.type !== 'board' && p.type !== 'door'){ ghostNo('do that'); return; }
   if (p.type === 'board'){ if (W.boat && Math.hypot(hero.x-W.boat.x, hero.z-W.boat.z) < 12) board(); else toast("Can't reach the boat from here."); return; }
   if (p.type === 'door'){ if (Math.hypot(hero.x-W.door.x, hero.z-W.door.z) < 5.5) enterHouse(); else toast("Can't reach the door from here."); return; }
   if (p.type === 'chop'){
@@ -7207,6 +7223,7 @@ const LOW = { k:0, el:null };
 function stepLow(dt, now){
   const f = player.hp/player.max, goal = f >= 0.3 ? 0 : Math.pow((0.3 - f)/0.3, 0.75);
   LOW.k += (goal - LOW.k)*Math.min(1, dt*3);
+  if (ghostOut() && !battle.on) LOW.k = Math.min(LOW.k, SpiritsGhost.CFG.home.dim);
   const el = LOW.el || (LOW.el = document.getElementById('lowVign')); if (!el) return;
   if (LOW.k < 0.005){ if (el.style.opacity !== '0') el.style.opacity = 0; return; }
   const bpm = 70 + 90*LOW.k, beat = reduceMotion ? 0 : Math.pow(Math.max(0, Math.sin(now/1000*Math.PI*bpm/60)), 8);
@@ -7722,11 +7739,12 @@ function stepSpirits(dt){
     const shimmer = Math.sin(s.fade*Math.PI);                                     // a bright shimmer while it comes or goes
     s.glow.material.opacity = ((s.sea ? 0.8 : 0.35) + (1 - (W.day ?? 1))*0.45)*e + shimmer*0.6;
     s.glow.scale.setScalar((s.sea ? 9 + Math.sin(s.t*2.4)*1.2 : 7)*(1 + shimmer*0.7));
-    if (canFight && s.calm <= 0 && dh < 6.5 && s.fade > 0.9 && !s.leaving) startEncounter(s);
+    if (canFight && s.calm <= 0 && dh < 6.5 && s.fade > 0.9 && !s.leaving && !ghostHomeT && !(typeof SpiritsGhost !== "undefined" && SpiritsGhost.form === 'dead')) startEncounter(s);
   }
   // rest to heal: slowly anywhere, quickly by a campfire
   const fire = W.builds.some(b => b.type === 'campfire' && Math.hypot(b.x - hero.x, b.z - hero.z) < 10);
-  if (player.hp < player.max){ player.hp = Math.min(player.max, player.hp + dt*(fire ? 6 : 0.8)); hudHP(); }
+  if (player.hp < player.max && !ghostOut()){ player.hp = Math.min(player.max, player.hp + dt*(fire ? 6 : 0.8)); hudHP(); }
+  if (ghostOut()) ghostHome();
 }
 
 /* ---------- Spirit Strikers cards ---------- */
@@ -8564,13 +8582,27 @@ function popText(pos, text, color){
 }
 function damageFoe(dmg){ battle.sHP = Math.max(0, battle.sHP - dmg); battle.blink = { who:'foe', t:0.55 }; battle.shake = Math.min(0.7, dmg/40); popText(foe.grp.position.clone().setY(foe.grp.position.y + 4.2), '-' + dmg); setBars(); }
 /* GHOST (Blu, Oct 4): out of health is a ghost, not dead; the ghost runs on magic; out of magic, the spirit leaves the body */
+/* GHOST, the way back (Blu, Oct 5): a ghost does not heal by standing about and cannot use her bag; "you have to manually get back home";
+   there "the character just passes out. Until they get full back to magic again" */
+function ghostOut(){ return typeof SpiritsGhost !== "undefined" && SpiritsGhost.form !== 'living'; }
+function ghostNo(what){ toast(`A ghost can't ${what}. Get home first.`); }
+var ghostHomeT = 0;
+function ghostHome(){
+  const H = SpiritsGhost.CFG.home;
+  if (ghostHomeT || battle.on || inside.on || !W.door || Math.hypot(hero.x - W.door.x, hero.z - W.door.z) > H.near) return;
+  ghostHomeT = 1; hero.target = null; hero.pending = null; toast(`Home. ${HERO()} passes out.`);
+  setTimeout(() => { if (battle.on || inside.on){ ghostHomeT = 0; return; }
+    fadeThen(() => { ghostHomeT = 0; if (battle.on || inside.on) return;
+      hero.x = W.door.x; hero.z = W.door.z + 3.2; hero.y = stepAt(hero.x, hero.z); player.hp = player.max*H.health; player.magic = player.magicMax; hudHP();
+      SpiritsGhost.reincarnate(); toast(`${HERO()} comes round at home, magic full.`); }); }, reduceMotion ? 200 : 1100);
+}
 async function ghostCheck(){ const g = typeof SpiritsGhost !== "undefined" ? SpiritsGhost.step() : (player.hp <= 0 ? 'dead' : null);
-  if (g === 'ghost'){ setShot('frogFace', false, 1.2); await anim('turnGhost', { dur: SpiritsGhost.CFG.turn.seconds }); await say(`Out of health. ${HERO()} is a ghost now, held here by magic.`); return false; }
+  if (g === 'ghost'){ setShot('frogFace', false, 1.2); await anim('turnGhost', { dur: SpiritsGhost.CFG.turn.seconds || 1.9 }); await say(`Out of health. ${HERO()} is a ghost now, held here by magic.`); return false; }
   if (g !== 'dead') return false;
-  if (typeof SpiritsGhost !== "undefined"){ setShot('frogFace', false, 1.2); await anim('leaveBody', { dur: SpiritsGhost.CFG.leave.seconds }); } else await anim('faintFrog');
+  if (typeof SpiritsGhost !== "undefined"){ setShot('frogFace', false, 1.2); await anim('leaveBody', { dur: SpiritsGhost.CFG.leave.seconds || 1.8 }); } else await anim('faintFrog');
   await say(`Out of magic. ${HERO()}'s spirit leaves the body.`); fadeThen(() => endEncounter('lose')); return true; }
-function damageFrog(dmg){ let mTook = 0; { const over = dmg - player.hp; if (over > 0 && player.magic > 0){ const take = Math.min(player.magic, over/8); player.magic -= take; mTook = take; if (take > 0 && window.__twTransfer) __twTransfer('m'); dmg -= Math.round(take*8); if (player.magic > 0 || dmg < player.hp) dmg = Math.max(0, Math.min(dmg, player.hp)); } }   // ONE ENERGY (Blu): past empty health the hit drains magic first
-  player.hp = Math.max(0, player.hp - dmg); battle.blink = { who:'frog', t:0.55 }; battle.shake = Math.min(0.7, dmg/32); popText(frogB.mesh.position.clone().setY(frogB.mesh.position.y + 5.8), dmg > 0 || !mTook ? '-' + dmg : '-' + Math.ceil(mTook) + ' magic', dmg > 0 || !mTook ? '#ffb3a0' : '#9fd0ff'); setBars(); }
+function damageFrog(dmg){ let mTook = 0; { const over = dmg - player.hp; if (over > 0 && player.magic > 0){ const take = Math.min(player.magic, over/8); player.magic -= take; mTook = take; if (take > 0 && window.__twTransfer) __twTransfer('m'); dmg -= Math.round(take*8); dmg = player.hp; } }   // ONE ENERGY (Blu): past empty health the hit drains magic first
+  player.hp = Math.max(0, player.hp - dmg); battle.blink = { who:'frog', t:0.55 }; battle.shake = Math.min(0.7, dmg/32); popText(frogB.mesh.position.clone().setY(frogB.mesh.position.y + 5.8), dmg > 0 || !mTook ? '-' + Math.ceil(dmg) : '-' + Math.ceil(mTook) + ' magic', dmg > 0 || !mTook ? '#ffb3a0' : '#9fd0ff'); setBars(); }
 function showMoves(){
   const box = $b('bmoves'); box.innerHTML = '';
   MOVES.forEach((m, i) => {
@@ -8580,9 +8612,9 @@ function showMoves(){
     b.onclick = () => choose(i); box.appendChild(b);
   });
   // relics dug from the ground are vessels: throw one in and seal the spirit inside it
-  const relics = have('relic'), arts = artFreeCount(), cap = document.createElement('button'); cap.className = 'mv cap half'; cap.disabled = relics + arts <= 0;
+  const relics = have('relic'), arts = artFreeCount(), cap = document.createElement('button'); cap.className = 'mv cap half'; cap.disabled = relics + arts <= 0 || ghostOut();
   cap.innerHTML = `<b>Capture</b><span>${sealWord(relics, arts)}</span>`; cap.onclick = captureTry; box.appendChild(cap);
-  const party = W.party || [], cast = document.createElement('button'); cast.className = 'mv cast half'; cast.disabled = !party.length || !!battle.ally;
+  const party = W.party || [], cast = document.createElement('button'); cast.className = 'mv cast half'; cast.disabled = !party.length || !!battle.ally || ghostOut();
   cast.innerHTML = `<b>Cast</b><span>${battle.ally ? SPIRIT_KINDS[battle.ally.kind].name + ' is out' : party.length ? party.length + ' sealed spirit' + (party.length > 1 ? 's' : '') : 'None captured yet'}</span>`; cast.onclick = castMenu; box.appendChild(cast);
   const run = document.createElement('button'); run.className = 'mv run'; run.innerHTML = '<b>Run</b>'; run.onclick = flee; box.appendChild(run);
   $b('bmsg').textContent = `What will ${HERO()} do?`; box.hidden = false; battle.lock = false;
@@ -8985,9 +9017,9 @@ function endEncounter(result){
     if (!s.dug) W.spiritQueue.push({ kind: s.kind, t: 90 });
   } else if (result === 'lose'){
     s.hp = Math.min(SPIRIT_KINDS[s.kind].hp, battle.sHP); s.calm = 10;
-    if (hero.boating){ hero.boating = false; const b = W.boat; b.x = W.boatSpot.x; b.z = W.boatSpot.z; b.target = null; }
-    hero.x = W.door.x; hero.z = W.door.z + 3.2; hero.y = stepAt(hero.x, hero.z); player.hp = player.max*0.5; hudHP(); if (typeof SpiritsGhost !== "undefined") SpiritsGhost.reincarnate();
-    toast(`${HERO()} is reincarnated at home.`);
+    if (typeof SpiritsGhost !== "undefined") toast(`${HERO()} is out of the body. Float home to come round.`);
+    else { if (hero.boating){ hero.boating = false; const b = W.boat; b.x = W.boatSpot.x; b.z = W.boatSpot.z; b.target = null; }
+      hero.x = W.door.x; hero.z = W.door.z + 3.2; hero.y = stepAt(hero.x, hero.z); player.hp = player.max*0.5; hudHP(); toast(`${HERO()} wakes up at home, a little dizzy.`); }
   } else {
     s.hp = Math.min(SPIRIT_KINDS[s.kind].hp, battle.sHP); s.calm = 8;
     const d = Math.hypot(s.x - hero.x, s.z - hero.z) || 1, nx = hero.x + (s.x - hero.x)/d*14, nz = hero.z + (s.z - hero.z)/d*14;
@@ -9240,6 +9272,7 @@ function encounterFrame(dt){
     }
     if (u >= 1){ const r = a.res; battle.anim = null; sparkShot.visible = false; r(); }
   }
+  if (!a && typeof SpiritsGhost !== "undefined" && SpiritsGhost.form === 'dead') frogSquash = 0.05;   // the body stays down once the spirit has left
   // blinking when hit, like the classic games
   let foeVis = true, frogVis = true;
   if (battle.blink){ battle.blink.t -= dt; const on = Math.floor(battle.blink.t/0.07) % 2 === 0; if (battle.blink.who === 'foe') foeVis = on; else frogVis = on; if (battle.blink.t <= 0) battle.blink = null; }

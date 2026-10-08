@@ -997,8 +997,8 @@ const SpiritsRep = (() => {
 })();
 
 /* SPIRITS-REP-END */</script>
-<script id="world-module">/* WORLD-BEGIN (generated — edit src/world/world.js, run tools/sync_world_module.py) */
-/* World — the hex link (Lane A, World agent). v2: one continuous world.
+<script id="world-module">/* WORLD-BEGIN (generated - edit src/world/world.js, run tools/sync_world_module.py) */
+/* World \u2014 the hex link (Lane A, World agent). v2: one continuous world.
    Spec: SPEC.md "World, travel and time". Blu, 2026-10-03: "Matching the coastline is number one." and
    "Load areas chunk by chunk, like Minecraft... in hexagon tile formations."
    So the world is ONE place. A spot in the game is a spot on Blu's Toga planner map, at the planet's 8x distance
@@ -1891,7 +1891,7 @@ const World = (() => {
   const list = () => Object.keys(SEED.hexes).filter(id => SEED.hexes[id].made).map(id => { const h = SEED.hexes[id]; return { id: +id, label: label(id), land: h.land, landType: h.landType, playable: h.land >= (BIOMES.minLand || 0.2) && !!startOf(id) }; });
   const hoursBetween = (a, b) => { const A = SEED.hexes[a], B = SEED.hexes[b], t = BIOMES.travel || { kmh: 5 }; return A && B ? Math.hypot(A.at[0] - B.at[0], A.at[1] - B.at[1])/SCALE/t.kmh : 0; };
   /* The contract (AGENTS.md). A4 (land health, spirit weather, pyramids, lizard pressure) is not built yet, so those
-     four are neutral placeholders, not canon: OPEN — Blu's call. */
+     four are neutral placeholders, not canon: OPEN \u2014 Blu's call. */
   function getTile(id){
     const h = SEED.hexes[id]; if (!h) return null;
     return { hexId: +id, biome: h.landType, height: h.heightClass, landHealth: 1, spiritWeather: 0, pyramidId: null, lizardPressure: 0, made: !!h.made,
@@ -1918,7 +1918,7 @@ const World = (() => {
 })();
 if (typeof window !== 'undefined') window.World = World;
 
-/* WorldMap — the travel map (Lane A, World agent).
+/* WorldMap \u2014 the travel map (Lane A, World agent).
    Blu, 2026-10-03: "Just be one menu. The whole map ... a whole separate page, similar to the Toga World Planner."
    "They should be hexes. I need you to generate the full 3D world ... like a satellite map." "Like the Rimworld travel
    system, basically like a caravan, but the character walks from place to place."
@@ -2014,7 +2014,7 @@ const WorldMap = (() => {
       el.innerHTML = `<canvas class="full" id="wmStars" aria-hidden="true"></canvas><canvas class="full" id="wmGl" tabindex="0" aria-label="The globe of Toga in hexes. Drag to turn it, scroll or pinch to zoom, arrow keys turn it, tap a hex to read it."></canvas><div id="wmVig"></div><canvas class="full" id="wmOv" aria-hidden="true"></canvas>
         <div id="wmWait">Laying out 20,252 hexes</div>
         <div id="wmCorner"><b>World Map</b><span>Toga · 20,252 hexes · 160 km each</span></div>
-        <div id="wmTools"><button class="wmBtn" id="wmOut" type="button" aria-label="Zoom out">−</button><button class="wmBtn" id="wmIn" type="button" aria-label="Zoom in">+</button><button class="wmBtn" id="wmMe" type="button">Find me</button><button class="wmGo" id="wmClose" type="button">Close</button></div>
+        <div id="wmTools"><button class="wmBtn" id="wmOut" type="button" aria-label="Zoom out">\u2212</button><button class="wmBtn" id="wmIn" type="button" aria-label="Zoom in">+</button><button class="wmBtn" id="wmMe" type="button">Find me</button><button class="wmGo" id="wmClose" type="button">Close</button></div>
         <aside class="glass" id="wmCard" aria-live="polite"></aside>
         <div class="glass" id="wmTrip" hidden><small>On foot</small><b id="wmTripT"></b><span id="wmTripS"></span><div id="wmBar"><i></i></div><button class="wmBtn" id="wmStop" type="button">Stop at the nearest hex</button></div>
         <div id="wmNarr"><canvas id="wmFrog" width="1" height="1" aria-hidden="true"></canvas><div class="bub"><small>Dreamer Frog</small><span id="wmSay"></span></div></div>
@@ -2241,7 +2241,7 @@ const WorldMap = (() => {
       if (typeof World === 'undefined' || !GLOBE.jpg){ game.toast('There is no map yet.'); return false; }
       const why = game.blocked(); if (why && !/boat|outside/.test(why)){ game.toast(why); return false; }
       if (!el) build();
-      el.hidden = false; lastT = 0; dist = 1.5; frog(); if (ready){ sel = -1; centre(me() || frameC()); info(); } else say('Laying out the hexes…');
+      el.hidden = false; lastT = 0; dist = 1.5; frog(); if (ready){ sel = -1; centre(me() || frameC()); info(); } else say('Laying out the hexes\u2026');
       draw(); gl.focus(); return true;
     }
     function close(){ if (trip){ trip.stop = true; return; } if (el) el.hidden = true; }
@@ -3429,34 +3429,44 @@ function stepTwinkle(dt){
   twGeo.setDrawRange(0, n); twGeo.attributes.position.needsUpdate = true; twGeo.attributes.color.needsUpdate = true; twinkle.visible = n > 0;
 }
 
+/* (v123) what buildTerrain writes into, kept from chunk to chunk: the triangles in the card's own formats (positions as
+   floats, normals as signed bytes, colours as bytes), and the fine height table with its slope tables. */
+const KEEP_MESH = /[?&]keepmesh=1/.test(location.search);            // (the tests that compare meshes read the tables back)
+function letGo(){ this.array = null; }            // a table of a chunk's mesh, once the card has it (three.js calls this on the table itself)
+function drawnOnce(){ this.frustumCulled = true; this.onAfterRender = THREE.Object3D.prototype.onAfterRender; }      // a new chunk is drawn once wherever it is, so the card takes its tables at once
+const LANDT = { pos: new Float32Array(9*40000), nor: new Int8Array(9*40000), col: new Uint8Array(9*40000), hf: new Float32Array(0), gm: new Float32Array(0), ox: new Float32Array(0), oz: new Float32Array(0) };
 function buildTerrain(ch){
   if (W.sw && !chunkLive(ch)) return emptyChunk(ch);          // only the loaded hexagon tiles get their land
   ch.empty = false; ch.dk = detailWant(ch); ch.lod = ch.dk > 0; const NL = ch.dk || 1;            // NL: how many feet to a step in this chunk
   const i0 = ch.cx*CS, j0 = ch.cz*CS, V = CS+1;
-  const pos = [], nor = [], col = [], lines = [];
+  const lines = []; let pos = LANDT.pos, nor = LANDT.nor, col = LANDT.col, nT = 0;            // nT: numbers written so far (9 a triangle)
   const tA = new THREE.Vector3(), tB = new THREE.Vector3();
   // one triangle; (fx,fy,fz) is only the side it should face, used to wind it the right way round
   const tri = (a, b, c, fx, fy, fz) => {
     tA.set(b.x-a.x, b.y-a.y, b.z-a.z); tB.set(c.x-a.x, c.y-a.y, c.z-a.z); tA.cross(tB);
     if (tA.x*fx + tA.y*fy + tA.z*fz < 0){ const t = b; b = c; c = t; }
-    pos.push(a.x,a.y,a.z, b.x,b.y,b.z, c.x,c.y,c.z); nor.push(a.nx,a.ny,a.nz, b.nx,b.ny,b.nz, c.nx,c.ny,c.nz);
-    col.push(a.r,a.g,a.b, b.r,b.g,b.b, c.r,c.g,c.b);
+    if (nT + 9 > pos.length){ const n = pos.length*2, p2 = new Float32Array(n), n2 = new Int8Array(n), c2 = new Uint8Array(n); p2.set(pos); n2.set(nor); c2.set(col); pos = LANDT.pos = p2; nor = LANDT.nor = n2; col = LANDT.col = c2; }
+    const k = nT; nT += 9;
+    pos[k] = a.x; pos[k+1] = a.y; pos[k+2] = a.z; pos[k+3] = b.x; pos[k+4] = b.y; pos[k+5] = b.z; pos[k+6] = c.x; pos[k+7] = c.y; pos[k+8] = c.z;
+    nor[k] = Math.round(a.nx*127); nor[k+1] = Math.round(a.ny*127); nor[k+2] = Math.round(a.nz*127); nor[k+3] = Math.round(b.nx*127); nor[k+4] = Math.round(b.ny*127); nor[k+5] = Math.round(b.nz*127); nor[k+6] = Math.round(c.nx*127); nor[k+7] = Math.round(c.ny*127); nor[k+8] = Math.round(c.nz*127);
+    col[k] = Math.round(clamp(a.r, 0, 1)*255); col[k+1] = Math.round(clamp(a.g, 0, 1)*255); col[k+2] = Math.round(clamp(a.b, 0, 1)*255); col[k+3] = Math.round(clamp(b.r, 0, 1)*255); col[k+4] = Math.round(clamp(b.g, 0, 1)*255); col[k+5] = Math.round(clamp(b.b, 0, 1)*255); col[k+6] = Math.round(clamp(c.r, 0, 1)*255); col[k+7] = Math.round(clamp(c.g, 0, 1)*255); col[k+8] = Math.round(clamp(c.b, 0, 1)*255);
   };
   const Vx = (x, y, z, n, c) => ({ x, y, z, nx:n[0], ny:n[1], nz:n[2], r:c.r, g:c.g, b:c.b });
   const norm3 = (x, y, z) => { const l = Math.hypot(x, y, z) || 1; return [x/l, y/l, z/l]; };
   const UPN = [0,1,0];
   // the smooth height field sampled three times finer than the grid (with a one-sample margin for slopes)
   const S = ch.lod ? 1 : 3, FN = CS*S + 1, FP = FN + 2, fd = CELL/S, BEV = ch.lod ? 0 : 0.32, WB = 1.0, M0 = 2*BEV/WB;
-  const hf = new Float32Array(FP*FP);
+  if (LANDT.hf.length < FP*FP){ LANDT.hf = new Float32Array(FP*FP); LANDT.gm = new Float32Array(FN*FN); LANDT.ox = new Float32Array(FN*FN); LANDT.oz = new Float32Array(FN*FN); }
+  const hf = LANDT.hf;
   for (let q=-1;q<=FN;q++) for (let p=-1;p<=FN;p++) hf[(q+1)*FP + p + 1] = hSmooth(i0 + p/S, j0 + q/S);
   const HF = (p,q) => hf[(q+1)*FP + p + 1];
   const GX = (p,q) => HF(p+1,q) - HF(p-1,q), GZ = (p,q) => HF(p,q+1) - HF(p,q-1);
   const X0 = wx(i0), Z0 = wx(j0), fxw = p => X0 + p*fd, fzw = q => Z0 + q*fd;
   // per fine sample: how steep the ground is (feet of height per foot) and which way is downhill
-  const GM = new Float32Array(FN*FN), OX = new Float32Array(FN*FN), OZ = new Float32Array(FN*FN);
+  const GM = LANDT.gm, OX = LANDT.ox, OZ = LANDT.oz;
   for (let q=0;q<FN;q++) for (let p=0;p<FN;p++){
     const ux = GX(p,q), uz = GZ(p,q), ul = Math.hypot(ux, uz), k = q*FN + p;
-    GM[k] = ul/(2*fd); if (ul > 1e-9){ OX[k] = -ux/ul; OZ[k] = -uz/ul; }
+    GM[k] = ul/(2*fd); if (ul > 1e-9){ OX[k] = -ux/ul; OZ[k] = -uz/ul; } else { OX[k] = 0; OZ[k] = 0; }            // (the tables are used again: a flat sample must be set to nothing, as a fresh table was)
   }
   // the lip of each step rounds over a fixed width measured from the step's own edge (not from the grid), so every
   // stretch of edge gets the same curve and nothing saw-tooths along it. lip() leaves the drop and its tilt in lipD/lipX/lipZ.
@@ -3536,11 +3546,12 @@ function buildTerrain(ch){
 
   const grp = new THREE.Group();
   const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
-  g.setAttribute('normal', new THREE.BufferAttribute(Int8Array.from(nor, v => Math.round(v*127)), 3, true));
-  g.setAttribute('color', new THREE.BufferAttribute(Uint8Array.from(col, v => Math.round(clamp(v, 0, 1)*255)), 3, true));
+  g.setAttribute('position', new THREE.BufferAttribute(pos.slice(0, nT), 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nor.slice(0, nT), 3, true));
+  g.setAttribute('color', new THREE.BufferAttribute(col.slice(0, nT), 3, true));
   g.computeBoundingSphere();
   const mesh = new THREE.Mesh(g, terrainMat); mesh.receiveShadow = true; mesh.layers.enable(1); grp.add(mesh);  // terrain never shadows itself: no acne
+  if (!KEEP_MESH){ g.attributes.position.onUpload(letGo); g.attributes.normal.onUpload(letGo); g.attributes.color.onUpload(letGo); mesh.frustumCulled = false; mesh.onAfterRender = drawnOnce; }      // (v123) the land is not held twice: once the card has a table, memory lets it go
   if (lines.length){ const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(lines,3)); grp.add(new THREE.LineSegments(lg, lineMat)); }
   const bp = [];
   const edge = (ax,az,bx,bz) => { for (let s=0;s<=CS;s++){ const x = lerp(ax,bx,s/CS), z = lerp(az,bz,s/CS); bp.push(x, Math.max(WATER, stepAt(x,z))+0.15, z); } };
@@ -4826,7 +4837,7 @@ function bedScene(){
     playShots([[[3.6,1.3,-1.2],[6.2,1.9,-4.2],56,0]]);
     walkTo(4.1, -3.4, 'noop');
   });
-  sayIn(night ? 'Eyes closing. The roof beams go soft…' : 'Just for a moment. The ceiling has a crack shaped like the river.');
+  sayIn(night ? 'Eyes closing. The roof beams go soft\u2026' : 'Just for a moment. The ceiling has a crack shaped like the river.');
 }
 function keyOutWhite(img){
   const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
@@ -5543,7 +5554,7 @@ function shapeLand(tool, i, j){
   if (dep){ W.ground = W.ground || {}; W.ground[dep.id] = (W.ground[dep.id] || 0) + 1; }
   return (tool === 'pick' ? `Chip! Broke off ${extra} bit${extra > 1 ? 's' : ''} of stone: ${v.toFixed(1)} ft.` : tool === 'shovel' ? `Scooped one shovelful: ${v.toFixed(1)} ft. +1 ${kind}` : `Put one down: ${v.toFixed(1)} ft.`) + (dep ? ` ${dep.name} in this ground.` : '');
 }
-/* ---------- spirit reputation: how each kind of spirit feels about you (-100 furious … +100 fond) ----------
+/* ---------- spirit reputation: how each kind of spirit feels about you (-100 furious \u2026 +100 fond) ----------
    chopping angers the forest spirits, digging the ground spirits, lingering in the water the water spirits; planting,
    farming and fires please them. Anger drifts back toward calm with time, and holding a spirit's element card calms it faster. */
 const REP_HOW = {
@@ -5562,11 +5573,11 @@ function nudgeRep(el, d){
 const REP_SHOWN = ['earth','water','wood','spirit'];   // the spirits that keep score, for now
 const REPS = { still:0, busy:0 };
 function markBusy(){ REPS.still = 0; REPS.busy += 1; if (REPS.busy > 8) nudgeRep('spirit', -1.5); }
-const anger = el => Math.max(0, -repOf(el))/100;         // 0 calm … 1 furious
+const anger = el => Math.max(0, -repOf(el))/100;         // 0 calm \u2026 1 furious
 function moodOf(v){ return v <= -70 ? 'Furious' : v <= -35 ? 'Angry' : v <= -10 ? 'Wary' : v < 10 ? 'Neutral' : v < 40 ? 'Friendly' : 'Fond'; }
 function renderRep(){
   const party = W.party || [];
-  $('repList').innerHTML = `<p style="margin:0 0 6px;font-size:14px"><b>Sealed in relics:</b> ${party.length ? party.map(p => SPIRIT_KINDS[p.kind].name + (p.rare ? ' ★' : '')).join(', ') : 'none yet. Dig up relics, then use Capture in a fight.'}</p>` + REP_SHOWN.map(el => { const v = Math.round(repOf(el)), E = ELEMENTS[el];
+  $('repList').innerHTML = `<p style="margin:0 0 6px;font-size:14px"><b>Sealed in relics:</b> ${party.length ? party.map(p => SPIRIT_KINDS[p.kind].name + (p.rare ? ' \u2605' : '')).join(', ') : 'none yet. Dig up relics, then use Capture in a fight.'}</p>` + REP_SHOWN.map(el => { const v = Math.round(repOf(el)), E = ELEMENTS[el];
     return `<div class="repRow"><span class="el"><i style="background:${E.a}"></i>${E.name}</span>
       <div class="meter" role="meter" aria-label="${E.name} spirits" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="${v}" aria-valuetext="${moodOf(v)}"><b style="left:${(v + 100)/2}%"></b></div>
       <span class="mood">${moodOf(v)}${hasElCard(el) ? ' · card' : ''}</span><span class="how">${REP_HOW[el]}</span></div>`; }).join('');
@@ -5682,10 +5693,10 @@ function arriveSpot(id){
   if (id === 'bed' && !reduceMotion){ setTimeout(() => { if (inside.on && inside.spot === 'bed') bedScene(); }, 900); return; }
   useSpot(id);
 }
-// ← → step from one thing in the room to the next
+// \u2190 \u2192 step from one thing in the room to the next
 function stepSpot(dir){
   const i = SPOT_ORDER.indexOf(inside.spot), n = SPOT_ORDER.length, next = SPOT_ORDER[((i < 0 ? (dir > 0 ? -1 : 0) : i) + dir + n) % n];
-  if (next === 'door' && dir){ inside.spot = 'door'; walkTo(SPOTS.door.stand[0], SPOTS.door.stand[1], 'noop'); sayIn('The door. Press ↑ to step outside.'); return; }
+  if (next === 'door' && dir){ inside.spot = 'door'; walkTo(SPOTS.door.stand[0], SPOTS.door.stand[1], 'noop'); sayIn('The door. Press \u2191 to step outside.'); return; }
   walkToSpot(next);
 }
 function sayIn(text){ if (!text) return; capTxt.textContent = text; capEl.classList.add('show'); clearTimeout(inside.capT); inside.capT = setTimeout(() => capEl.classList.remove('show'), 6000); }
@@ -6488,7 +6499,21 @@ const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 function setRay(cx, cy, c){ let ux = cx/innerWidth - 0.5, uy = cy/innerHeight - 0.5;
   if (c === camera && window.TW_CURVE && TW_CURVE.k) [ux, uy] = TW_CURVE.fwd(ux, uy);
   ndc.set(ux*2, -uy*2); ray.setFromCamera(ndc, c); }
-const terrainHit = () => ray.intersectObjects(W.chunks.map(c => c.mesh))[0] || null;
+/* (v123) where the ray from the eye meets the land. It used to be tested against every triangle of every chunk it passed (so
+   the triangles had to stay in memory, and a hover did it twenty times a second). Now it walks along the ray half a foot at a
+   time over the land's own terraced heights, the ones that are drawn, and closes in on the crossing. */
+function terrainHit(){
+  const o = ray.ray.origin, d = ray.ray.direction, E = HALF - 0.01; let t0 = 0, t1 = 1e9;
+  if (Math.abs(d.x) > 1e-9){ const a = (-E - o.x)/d.x, b = (E - o.x)/d.x; t0 = Math.max(t0, Math.min(a, b)); t1 = Math.min(t1, Math.max(a, b)); } else if (Math.abs(o.x) > E) return null;      // the stretch of the ray that lies over the window of land
+  if (Math.abs(d.z) > 1e-9){ const a = (-E - o.z)/d.z, b = (E - o.z)/d.z; t0 = Math.max(t0, Math.min(a, b)); t1 = Math.min(t1, Math.max(a, b)); } else if (Math.abs(o.z) > E) return null;
+  if (!(t1 > t0)) return null;
+  const under = t => { const x = o.x + d.x*t, z = o.z + d.z*t; return !chunkAt(Math.floor(gx(x)), Math.floor(gx(z))).empty && o.y + d.y*t < stepAt(x, z); };      // (a chunk with no land made has nothing to hit)
+  if (under(t0)) return null;                                   // it starts under the land: nothing faces it
+  for (let tp = t0, t = t0 + 0.5; tp < t1; tp = t, t += 0.5){ const tt = Math.min(t, t1);
+    if (under(tt)){ let a = tp, b = tt; for (let k = 0; k < 12; k++){ const m = (a + b)/2; if (under(m)) b = m; else a = m; }
+      return { point: new THREE.Vector3(o.x + d.x*b, o.y + d.y*b, o.z + d.z*b), distance: b }; } }
+  return null;
+}
 const pointers = new Map(); let dragMoved = 0, pinch0 = 0, dist0 = 0, lastHover = 0;
 let holdTimer = 0, holdFired = false;
 canvas.addEventListener('contextmenu', e => { e.preventDefault(); if (ui.tool === 'shovel' && !inside.on && !battle.on) putDownAt(e.clientX, e.clientY); });
@@ -6752,7 +6777,7 @@ function sail(dx, dz, dt){
   return sp;
 }
 
-/* ================= weather: clear, fair, overcast, rain — it drifts from one to the next on its own ================= */
+/* ================= weather: clear, fair, overcast, rain \u2014 it drifts from one to the next on its own ================= */
 const WX = { cover:0.25, wind:0.35, rain:0, target:null, next:40, mode:'auto' };
 const WX_STATES = { clear:{ cover:0.05, wind:0.2, rain:0 }, fair:{ cover:0.38, wind:0.4, rain:0 }, overcast:{ cover:0.85, wind:0.6, rain:0 },
                     windy:{ cover:0.45, wind:1.0, rain:0 }, rain:{ cover:0.97, wind:0.75, rain:1 } };
@@ -6821,7 +6846,7 @@ function stepWeather(dt){
    so it can be up in daylight. Game time, not real time: 1 game day = 6 real minutes (clock), 365 game days = a year.
    Numbers marked OPEN are Blu's call (see SKY.md). */
 const TOGA = {
-  tiltDeg: 23.44,            // axial tilt → seasons. OPEN: Earth's value until Toga's is set
+  tiltDeg: 23.44,            // axial tilt \u2192 seasons. OPEN: Earth's value until Toga's is set
   yearDays: 365.2422,        // the Spirit Strikers calendar: 365 + a leap day (Khayyam 33-year rule later)
   moonSynodic: 29.53,        // new moon to new moon, in days. OPEN: one moon like Earth's?
   moonIncDeg: 5.14,          // the moon's tilt off the sun's path
@@ -8697,7 +8722,7 @@ const RELICS = {
   R5: { name:"The Crow's Tapestry", a:'#9a5ad8', b:'#f0d8ff', c:'#e4b34a', pat:5, line:'The banner unfurls, and its old figure glows!' },
   R2: { name:"The Monkey's Cannon", a:'#8fe07a', b:'#e8ffd0', c:'#dfe8ee', pat:3, line:'The cannon charges up with a green roar!' },
 };
-/* each relic seals one element: the card's owner (frog, lizard, monkey…) and that character's place in the deck's 7 × 7 order */
+/* each relic seals one element: the card's owner (frog, lizard, monkey\u2026) and that character's place in the deck's 7 × 7 order */
 const RELIC_EL = { R1:'water', R2:'wood', R3:'electric', R4:'fire', R5:'metal', R6:'earth', R7:'spirit' };
 /* artifacts: each takes its look in a fight (aura, colours) from the relic of its own element; its model is its own */
 if (typeof Artifacts !== 'undefined' && Artifacts.ready()){
@@ -8847,7 +8872,7 @@ function captureTry(){
   const ids = [...RELIC_IDS.filter(id => have(id) > 0), ...artIdsFree(), ...(countIn(W.pack, 'relic') - RELIC_IDS.reduce((a, id) => a + have(id), 0) > 0 ? ['relic'] : [])];
   for (const id of ids){ const b = document.createElement('button'); b.className = 'mv'; const R = RELICS[id];
     const el = RELIC_EL[id], Kf = SPIRIT_KINDS[battle.s.kind], fit = id === 'relic' || el === Kf.type;
-    b.innerHTML = `<b>${R ? R.name : 'Old relic'}</b><span>${id === 'relic' ? 'Holds any spirit' : isArt(id) ? 'Holds one ' + ELEMENTS[el].name + ' spirit' : 'Seals ' + ELEMENTS[el].name + ' spirits'}${fit ? ' ✓' : ' — wrong element'}</span><em>×${id === 'relic' ? countIn(W.pack, 'relic') - RELIC_IDS.reduce((a, q) => a + have(q), 0) : isArt(id) ? artFree(id) : have(id)}</em>`;
+    b.innerHTML = `<b>${R ? R.name : 'Old relic'}</b><span>${id === 'relic' ? 'Holds any spirit' : isArt(id) ? 'Holds one ' + ELEMENTS[el].name + ' spirit' : 'Seals ' + ELEMENTS[el].name + ' spirits'}${fit ? ' \u2713' : ' \u2014 wrong element'}</span><em>×${id === 'relic' ? countIn(W.pack, 'relic') - RELIC_IDS.reduce((a, q) => a + have(q), 0) : isArt(id) ? artFree(id) : have(id)}</em>`;
     b.onclick = () => throwRelic(id); box.appendChild(b); }
   const back = document.createElement('button'); back.className = 'mv run'; back.innerHTML = '<b>Back</b>'; back.onclick = showMoves; box.appendChild(back);
   $b('bmsg').textContent = `What will hold it? A ${ELEMENTS[SPIRIT_KINDS[battle.s.kind].type].name} spirit needs a ${ELEMENTS[SPIRIT_KINDS[battle.s.kind].type].name} relic or artifact.`;
@@ -8892,7 +8917,7 @@ function castMenu(){
   if (battle.lock || battle.ally) return;
   const box = $b('bmoves'); box.innerHTML = '';
   (W.party || []).forEach((p, i) => { const K = SPIRIT_KINDS[p.kind], b = document.createElement('button'); b.className = 'mv';
-    b.innerHTML = `<b>${K.name}${p.rare ? ' ★' : ''}</b><span>${ELEMENTS[K.type].name} spirit</span>`; b.onclick = () => castSpirit(i); box.appendChild(b); });
+    b.innerHTML = `<b>${K.name}${p.rare ? ' \u2605' : ''}</b><span>${ELEMENTS[K.type].name} spirit</span>`; b.onclick = () => castSpirit(i); box.appendChild(b); });
   const back = document.createElement('button'); back.className = 'mv run'; back.innerHTML = '<b>Back</b>'; back.onclick = showMoves; box.appendChild(back);
 }
 async function castSpirit(i){
@@ -8989,7 +9014,7 @@ function startEncounter(s, forceArena){
   frogB.mesh.scale.set(1,1,1);
   foePad.visible = true; staffPivot.visible = W.wear.weapon != null && (!window.__heroCode || window.__heroCode === 'C1'); if (staffPivot.visible && !staffInHand){ staffInHand = true; composeHero(); } setAura(foeAura, K.type); typeChip($b('foeType'), K.type);
   hideWorld(true); $b('battle').hidden = false; $b('photoUI').hidden = true; $b('reveal').hidden = true; $b('bmoves').hidden = true;
-  $b('foeName').textContent = K.name + (battle.rare ? ' ★' : ''); $b('bmsg').textContent = '';
+  $b('foeName').textContent = K.name + (battle.rare ? ' \u2605' : ''); $b('bmsg').textContent = '';
   const fl = $b('bflash'); fl.classList.remove('go'); void fl.offsetWidth; fl.classList.add('go');
   setBars();
   const [ip, ia, ifov] = shotOf('intro'); bcam.pos.copy(ip); bcam.at.copy(ia); bcam.fov = ifov*(innerWidth/innerHeight < 0.8 ? 1.3 : 1); bcam.idleI = 0;
@@ -9864,7 +9889,7 @@ const FAM = (() => {
       const d = new THREE.Mesh(new THREE.SphereGeometry(.11, 8, 6), dot); s.add(d); eggs.add(s); }
     eggs.position.set(p.x, groundY(p.x, p.z), p.z); scene.add(eggs);
   }
-  const heartStr = () => { const n = Math.round(st.chem/20); return '♥'.repeat(n) + '♡'.repeat(5 - n); };
+  const heartStr = () => { const n = Math.round(st.chem/20); return '\u2665'.repeat(n) + '\u2661'.repeat(5 - n); };
   function act(){
     if (Date.now() < busyUntil) return;
     if (window.__heroCode && window.__heroCode !== 'C1'){ toast('Only Dreamer Frog can court Toe for now.'); return; }
@@ -9900,7 +9925,7 @@ const FAM = (() => {
           toast(`A Baby Frog hatched! ${st.kids.length > 1 ? 'You have ' + st.kids.length + ' little ones now.' : 'It follows you everywhere.'}`); } }
       const hudBox = (() => { const h = document.getElementById('twHud'); return !!(h && h.shadowRoot && h.shadowRoot.querySelector('.box3d.open')); })();
       const near = hd < 5.5 && (!window.__heroCode || window.__heroCode === 'C1') && !battle.on && !inside.on && !hudBox && document.getElementById('bag').hidden;
-      btn.hidden = !near; if (near) btn.textContent = st.chem < 100 ? `Spend time with Toe  ${heartStr()}` : st.eggs ? 'Frogspawn on the way' : 'Start a family with Toe  ♥';
+      btn.hidden = !near; if (near) btn.textContent = st.chem < 100 ? `Spend time with Toe  ${heartStr()}` : st.eggs ? 'Frogspawn on the way' : 'Start a family with Toe  \u2665';
     }
     requestAnimationFrame(frame);
   }
@@ -9920,7 +9945,7 @@ requestAnimationFrame(frame);
   const COLORS = ['#f2c14e','#6fcf7f','#7fb6ff','#ef6b5b','#c58cf2','#5fd6d0','#ff9d5c'];
   const colorFor = id => COLORS[[...String(id)].reduce((h,c) => (h*31 + c.charCodeAt(0)) >>> 0, 7) % COLORS.length];
   const MP = { room:null, send:null, others:new Map(), connected:false, sendT:0, myColor:COLORS[0], retrying:false };
-  window.__MP = MP;   // debug handle only — nothing in the game reads it
+  window.__MP = MP;   // debug handle only \u2014 nothing in the game reads it
   let nameVal = 'Friend'; try { nameVal = localStorage.getItem('twName') || 'Friend'; } catch(e){}
 
   /* ---- button + panel: presence only, nothing to set up ---- */
@@ -9938,7 +9963,7 @@ requestAnimationFrame(frame);
     <label style="display:flex;gap:8px;align-items:center;margin-bottom:8px">Name
       <input id="fpName" maxlength="14" style="flex:1;min-width:0;padding:6px 8px;border:1.5px solid #1d2433;border-radius:8px;font:inherit"></label>
     <button class="btn" id="fpCopy" type="button" style="width:100%;margin-bottom:4px">Copy game link</button>
-    <p id="fpStatus" style="margin:10px 0 4px;color:#5a6477">Joining the world…</p>
+    <p id="fpStatus" style="margin:10px 0 4px;color:#5a6477">Joining the world\u2026</p>
     <ul id="fpList" style="list-style:none;padding:0;margin:0"></ul>`;
   document.body.appendChild(panel);
   const $f = id => document.getElementById(id);
@@ -9949,10 +9974,10 @@ requestAnimationFrame(frame);
   btn.onclick = () => { panel.hidden = !panel.hidden; if (!panel.hidden) renderList(); };
   $f('fpClose').onclick = () => { panel.hidden = true; };
   const status = (m, bad) => { $f('fpStatus').textContent = m; $f('fpStatus').style.color = bad ? '#c0392b' : '#2e7d32'; };
-  // One link is all a friend needs — everyone lands in the same world lobby.
+  // One link is all a friend needs \u2014 everyone lands in the same world lobby.
   const GAME_LINK = 'https://frog-dex.github.io/terrace-world/';
   $f('fpCopy').onclick = () => {
-    const done = () => status('Link copied — send it to a friend.');
+    const done = () => status('Link copied \u2014 send it to a friend.');
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(GAME_LINK).then(done, () => prompt('Copy the game link:', GAME_LINK));
     else prompt('Copy the game link:', GAME_LINK);
   };
@@ -9965,7 +9990,7 @@ requestAnimationFrame(frame);
     for (const o of MP.others.values()) add(o.name, o.color, false);
     const total = MP.others.size + (MP.connected ? 1 : 0);
     btn.textContent = MP.connected ? `Friends · ${total}` : 'Friends';
-    if (MP.connected) status(MP.others.size ? `${total} players in the world right now.` : 'You are in. No one else online yet — send someone the game link.');
+    if (MP.connected) status(MP.others.size ? `${total} players in the world right now.` : 'You are in. No one else online yet \u2014 send someone the game link.');
   }
 
   /* ---- remote frogs: a Walker each, plus a name tag ---- */
@@ -10034,7 +10059,7 @@ requestAnimationFrame(frame);
       onJoinError: () => {
         if (MP.retrying) return;
         MP.retrying = true; MP.connected = false; MP.send = null;
-        status('Reconnecting…');
+        status('Reconnecting\u2026');
         try { room.leave(); } catch(e){}
         for (const id of [...MP.others.keys()]) dropOther(id);
         setTimeout(() => joinLobby(lib), 1200 + Math.random()*1800);
@@ -10042,7 +10067,7 @@ requestAnimationFrame(frame);
     });
     // trystero 0.25.4 on jsdelivr re-exports @trystero-p2p/nostr, whose API differs from
     // the docs: makeAction returns {send, onMessage} with onMessage an ASSIGNABLE property
-    // (set it, don't call it); handlers get (data, {peerId}) — the 2nd arg is an object,
+    // (set it, don't call it); handlers get (data, {peerId}) \u2014 the 2nd arg is an object,
     // not the id itself; room.onPeerJoin/onPeerLeave are assignable properties too.
     // hook() + pid() absorb every shape so a CDN change can't break the lobby again.
     const pid = p => (typeof p === 'string' ? p : (p && p.peerId)) || null;
@@ -10577,7 +10602,7 @@ $('bagTab').onclick = () => { openP(null); TWHUD.toggleBag(); }; $('cardTab').on
 SR.querySelectorAll('.mi').forEach(b => b.onclick = () => { toast(b.textContent); if (b.textContent==='Resume') openP(null); });
 addEventListener('keydown', e => { if (e.target.id==='renameIn' || window.TWHUD) return;
   if (isOpen('picker')){ if (e.key==='ArrowLeft'){ stepPick(-1); return; } if (e.key==='ArrowRight'){ stepPick(1); return; } if (e.key==='Enter'){ $('chooseC').click(); return; } }
-  if (e.key>='1' && e.key<='8') pick(+e.key-1); if (e.key==='g') hudGrid(); if (e.key==='k' && !S.nd){ S.nd = 1; S.ndT = 0; S.anima = Math.max(S.anima, .6); toast('Taking damage…'); } if (e.key==='b') openP('bag'); if (e.key==='c'){ openP('cards'); renderCards(); } if (e.key==='Escape'){ $('cardZoom').hidden = true; openP(null); } });
+  if (e.key>='1' && e.key<='8') pick(+e.key-1); if (e.key==='g') hudGrid(); if (e.key==='k' && !S.nd){ S.nd = 1; S.ndT = 0; S.anima = Math.max(S.anima, .6); toast('Taking damage\u2026'); } if (e.key==='b') openP('bag'); if (e.key==='c'){ openP('cards'); renderCards(); } if (e.key==='Escape'){ $('cardZoom').hidden = true; openP(null); } });
 /* ---------------- the bag: equipment | character | backpack grid (the game's Kenshi-style grid) ---------------- */
 let GW = 10, GH = 8, CELL = 34;
 const ITEMS = [{n:'Spirit Catcher',x:0,y:0,w:2,h:1,c:'#e4b34a',wt:2,slot:'relic'},{n:'Wood',x:2,y:0,w:1,h:2,c:'#b98a55',wt:3},{n:'Wood',x:3,y:0,w:1,h:2,c:'#b98a55',wt:3},
@@ -10589,7 +10614,7 @@ const INFO = { 'Spirit Catcher':['Relic · Water','Seals Water spirits. Throw it
   'Stone':['Material','Good for building walls and paths.'], 'Toilet':['Furniture','Heavy. Somebody has to carry it.'], 'Old computer':['Junk · Ancient','From before. The lizards would want this.'],
   'Bottle':['Container','Holds water, or a small spirit for a while.'], 'Seeds':['Farming','Plant them on tilled ground.'], 'Hoe':['Tool','Tills the ground for planting.'], 'Stew':['Food','Restores a little health.'],
   'Melon':['Food','Big and sweet. Restores health.'], 'Rain boots':['Wear · Boots','Keep your feet dry in the Frog Barrow bogs.'], 'Straw strap':['Wear · Strap','Carries one more tool at your side.'] };
-const EQUIP = { head:{n:'Crown',ic:'👑',wt:1,ward:'crown'}, shirt:{n:'Dress',ic:'👗',wt:1,ward:'dress'}, pants:null, boots:{n:'Shoes',ic:'👞',wt:1,ward:'shoes'}, pack:{n:'Backpack',ic:'🎒',wt:2,art:'pack1'}, strap:null, weapon:{n:'Staff',ic:'🪄',wt:2,art:'staff'}, relic:null };
+const EQUIP = { head:{n:'Crown',ic:'\ud83d\udc51',wt:1,ward:'crown'}, shirt:{n:'Dress',ic:'\ud83d\udc57',wt:1,ward:'dress'}, pants:null, boots:{n:'Shoes',ic:'\ud83d\udc5e',wt:1,ward:'shoes'}, pack:{n:'Backpack',ic:'\ud83c\udf92',wt:2,art:'pack1'}, strap:null, weapon:{n:'Staff',ic:'\ud83e\ude84',wt:2,art:'staff'}, relic:null };
 INFO['T-shirt'] = ['Wear · Shirt','Plain and comfy.']; INFO['Shorts'] = ['Wear · Pants','Good for wading.'];
 /* the mirror: the game's own dress-up layers (one bare body, clothes drawn over it), exactly as Terrace World composes her */
 const WARD_SRC = TWHUD.ward || {}, ITEM_ART = TWHUD.itemArt || {};
@@ -10797,8 +10822,8 @@ function relicPlate(){
   const heat = r ? r.heat : 'none', H = { here: ['Dig here!', '#c0392b'], hot: ['Hot', '#c2410c'], warm: ['Warm', '#b86400'], faint: ['Faint', '#7a5c14'], none: ['Nothing', '#5b5579'] }[heat] || ['Nothing', '#5b5579'];
   const ang = r && heat !== 'none' ? Math.round(r.rel*20)/20 : null, key = heat + ang;
   if (key === relicKey) return; relicKey = key;
-  // ONE LINE (Blu): "Relic finder  ◆ Warm ▲" side by side, never stacked, big enough to read at a glance
-  $('dtTime').innerHTML = `<i class="rgem" style="--g:${H[1]}"></i><span style="color:${H[1]}">${H[0]}</span>` + (ang === null ? '' : `<b class="rarr" style="transform:rotate(${ang}rad)">▲</b>`);
+  // ONE LINE (Blu): "Relic finder  \u25c6 Warm \u25b2" side by side, never stacked, big enough to read at a glance
+  $('dtTime').innerHTML = `<i class="rgem" style="--g:${H[1]}"></i><span style="color:${H[1]}">${H[0]}</span>` + (ang === null ? '' : `<b class="rarr" style="transform:rotate(${ang}rad)">\u25b2</b>`);
   $('dtDate').textContent = 'Relic finder';
 }
 /* ---------------- rename ---------------- */
@@ -11592,7 +11617,7 @@ const GAMEBTN = id => { const b = document.getElementById(id); if (b) b.click();
 function hudSync(){
   // selected tool
   const ti = TWHUD.TOOLS.indexOf(TWHUD.tool); if (ti >= 0 && ti !== S.sel){ S.sel = ti; [...slotsEl.children].forEach((b,k) => b.classList.toggle('sel', k === ti)); }
-  // reputation: the game's per-element standing, -100..100 → 0..1
+  // reputation: the game's per-element standing, -100..100 \u2192 0..1
   if (!hudSync.t || performance.now() - hudSync.t > 700){ hudSync.t = performance.now();
     ['fire','electric','wood','water','earth','metal'].forEach(k => S.rep[k] = Math.max(.05, (TWHUD.rep(k) + 100)/200));
     S.overall = Math.max(-1, Math.min(1, TWHUD.overall())); if (typeof drawHex === 'function' && $('wheel').classList.contains('open')) drawHex();
@@ -11663,7 +11688,7 @@ SR.querySelectorAll('.mi').forEach(b => b.onclick = () => { const t = b.textCont
   SR.appendChild(st); }
 
 /* ---------------- the Toga calendar, drawn on the back of the compass ----------------
-   Outside: the days of the month, 1–25 (in the Close: 15 days, Soul 10 then Spirit 5, counting to the new year).
+   Outside: the days of the month, 1\u201325 (in the Close: 15 days, Soul 10 then Spirit 5, counting to the new year).
    Between the two rings: the year as 15 slices (14 sign-months + the Close); Toga sits on it where it is on its orbit, the moon beside it in its phase.
    Middle: today, in words. At the new year the day ring spins back round: the reset. */
 /* THE MOVEMENT (Blu, Sept 28): the back of the device is an open skeleton pocket watch. Brass bridges with the gear train
@@ -11731,8 +11756,8 @@ function drawTogaCal(K){
     let st = {}; try { st = JSON.parse(localStorage.getItem('tw-comp-pose') || '{}'); } catch(e){}
     window.__compPose = st.pose || 'half'; window.__compFlip = !!st.flip;   // Blu: it always comes back to halfway
     const save = () => { try { localStorage.setItem('tw-comp-pose', JSON.stringify({ pose: window.__compPose, flip: window.__compFlip })); } catch(e){} };
-    // Blu: no buttons, no pin. CLICK the compass to cycle its view (hidden → half → full). HOVER extends it a little more; leaving settles it.
-    // The tag under it keeps only the coordinates and one on/off SWITCH: compass ⟷ calendar (symbols only, no words).
+    // Blu: no buttons, no pin. CLICK the compass to cycle its view (hidden \u2192 half \u2192 full). HOVER extends it a little more; leaving settles it.
+    // The tag under it keeps only the coordinates and one on/off SWITCH: compass \u27f7 calendar (symbols only, no words).
     pin.style.display = 'none'; S.pinned = false;
     const sw = document.createElement('button'); sw.type = 'button'; sw.className = 'cswitch'; sw.setAttribute('role', 'switch'); sw.setAttribute('aria-label', 'Compass or calendar');
     sw.innerHTML = '<span class="opt c"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="1.2"/><path d="M12 4.5l1.6 6.1L12 12l-1.6-1.4z" class="n"/><path d="M12 19.5l-1.6-6.1L12 12l1.6 1.4z"/><path d="M12 2.2v1.6M12 20.2v1.6M2.2 12h1.6M20.2 12h1.6"/></svg><i class="x"></i></span>' +
@@ -11886,10 +11911,10 @@ function frame(now){
     if (window.TW_SKY){ const K = TW_SKY, o = (typeof hud3 !== 'undefined' && hud3 && hud3.compOpen != null) ? hud3.compOpen : 1, R = 2.15;
       // open: each body at its true bearing from where you face, raised by its height (below the disc when set: you see it through the glass)
       // folded: the sky seen looking south, east on the left, west on the right, height = how high it is
-      // Blu: the compass always shows where the sun and moon ARE. Sun in the east → it sits on the east of the ring.
+      // Blu: the compass always shows where the sun and moon ARE. Sun in the east \u2192 it sits on the east of the ring.
       // Open: each body rides the ring at its true compass bearing (turning with you like N/E/S/W); a set body stays on the ring, smaller.
       // Folded: the same bearings seen side-on (east left, west right, south in the middle), riding just above the bar.
-      // Open (Blu): the sun and moon ride the RING at their true compass bearing (sun in the east → on the east of the ring),
+      // Open (Blu): the sun and moon ride the RING at their true compass bearing (sun in the east \u2192 on the east of the ring),
       //   turning with you like N/E/S/W. The gold arc of the ring is the daytime: it runs from where the sun rose round (through
       //   the south) to where it sets, so its length IS how much day there is at this latitude and season. Set bodies go dim.
       // Folded: the same sky seen side-on (east left, west right), riding just above the bar.
@@ -11898,7 +11923,7 @@ function frame(now){
       const put = (m, B) => { const b = B.az - S.heading, up = B.el > 0, e = B.el, U = m.userData, k = Math.min(1, dt*6);
         if (U.ang == null || !isFinite(U.ang)) U.ang = b; U.ang += ((((b - U.ang + Math.PI) % (Math.PI*2)) + Math.PI*2) % (Math.PI*2) - Math.PI)*k;
         const ox = Math.sin(U.ang)*R, oz = -Math.cos(U.ang)*R, oy = .22;
-        const fxT = -Math.sin(B.az)*R*0.96, fyT = .02, fz = 2.62;   // folded: they slide along the bar itself, east → west
+        const fxT = -Math.sin(B.az)*R*0.96, fyT = .02, fz = 2.62;   // folded: they slide along the bar itself, east \u2192 west
         U.fx = U.fx == null || !isFinite(U.fx) ? fxT : U.fx + (fxT - U.fx)*k; U.fy = U.fy == null || !isFinite(U.fy) ? fyT : U.fy + (fyT - U.fy)*k; const fx = U.fx, fy = U.fy;
         m.position.set(fx + (ox - fx)*o, fy + (oy - fy)*o, fz + (oz - fz)*o);
         m.visible = o > .5 || up;                 // RULE: folded, a set sun/moon is never drawn; a risen one rides its true arc above the bar

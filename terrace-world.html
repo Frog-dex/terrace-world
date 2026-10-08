@@ -1620,31 +1620,62 @@ const World = (() => {
      sea, or at one of the map's rivers. */
   function netUp(k, n){            // the heads whose valleys run on to this one
     if (n.up) return n.up; const u = [], R = wayR(k);
-    for (let b = n.b - 2; b <= n.b + 2; b++) for (let a = n.a - 2; a <= n.a + 2; a++){ if (a === n.a && b === n.b) continue; const m = cutTo(k, a, b); if (m.to === n && !m.long) u.push(m); }
-    for (let bj = Math.floor((n.b - R)/BLK); bj <= Math.floor((n.b + R)/BLK); bj++) for (let bi = Math.floor((n.a - R)/BLK); bi <= Math.floor((n.a + R)/BLK); bi++) for (const m of cutBlock(k, bi, bj)) if (m.to === n) u.push(m);
+    for (let b = n.b - 2; b <= n.b + 2; b++) for (let a = n.a - 2; a <= n.a + 2; a++){ if (a === n.a && b === n.b) continue; const m = cutTo(k, a, b); if (m.to === n && !m.long && capOf(k, m) < 0) u.push(m); }
+    for (let bj = Math.floor((n.b - R)/BLK); bj <= Math.floor((n.b + R)/BLK); bj++) for (let bi = Math.floor((n.a - R)/BLK); bi <= Math.floor((n.a + R)/BLK); bi++) for (const m of cutBlock(k, bi, bj)) if (m.to === n && capOf(k, m) < 0) u.push(m);
     return n.up = u; }
   function netFlow(k, n, d){            // how many heads drain to this one, counting d stretches upstream
     if (d <= 0) return 1; const D = BIOMES.creeks.net.hops; if (!n.fd) n.fd = new Float32Array(D + 1); if (n.fd[d]) return n.fd[d];
     let f = 1; for (const m of netUp(k, n)) f += netFlow(k, m, d - 1); return n.fd[d] = f; }
   const netReal = (k, n) => n;            // (a head carries where it really lies: cutNode)
-  function netStream(k, n){            // one stretch of stream: from a valley head to the head its valley runs on to (along its way out, if it winds)
+  /* (v124) STREAMS JOIN, THEY DO NOT CROSS. Blu, 2026-10-07, by the house at Reedharbour: "this whole water thing doesn't make
+     sense." Each size of valley had its own net of streams, laid one over the other: a gully's creek ran straight across a
+     valley's stream and on to a mouth of its own. Now a stream that comes to a bigger stream ends there: the bigger one
+     carries its water on. lineFt: how far a spot is from the nearest valley line of level k, and whose line it is.
+     capOf: how far along its way the stream of head n meets a bigger stream (-1: it does not; 0: its head stands in one,
+     and it has no stream of its own). */
+  let lnA = 0, lnB = 0, lnX = 0, lnZ = 0;
+  function lineFt(k, x, z){ const L = BIOMES.relief.cut.levels[k], f = L.acrossFt, w = L.warpFt || 0, g = f*0.9;
+    const px = x + (vn(x/g + 11.3 + k*5.1, z/g - 4.7, 731 + k) - 0.5)*2*w, pz = z + (vn(x/g - 6.1, z/g + 9.9 + k*3.3, 741 + k) - 0.5)*2*w, S = cutCell(k, Math.floor(px/f), Math.floor(pz/f)); let best = 1e18; lnX = px; lnZ = pz;
+    for (let q = 0; q < S.length; q += 8){ const ax = S[q], az = S[q + 1], ex = S[q + 3] - ax, ez = S[q + 4] - az, tt = clamp(((px - ax)*ex + (pz - az)*ez)/(ex*ex + ez*ez || 1), 0, 1), dx = px - ax - ex*tt, dz = pz - az - ez*tt, d2 = dx*dx + dz*dz; if (d2 < best){ best = d2; lnA = S[q + 6]; lnB = S[q + 7]; } }
+    return Math.sqrt(best); }
+  function streamHalfFt(k, m){ const NT = BIOMES.creeks.net, C = BIOMES.relief.cut.levels, eq = Math.pow(C[k].acrossFt/C[C.length - 1].acrossFt, 2); return Math.min(NT.wideFt[1], NT.wideFt[0]*Math.pow(netFlow(k, m, NT.hops)*eq, NT.widePow))/2; }
+  function wayAt(o, px, pz){            // how far along head o's way the spot (in that level's own winding space) lies
+    const way = o.way || [o, o.to]; let best = 1e18, at = 0, run = 0;
+    for (let q = 1; q < way.length; q++){ const ax = way[q - 1].x, az = way[q - 1].z, ex = way[q].x - ax, ez = way[q].z - az, l = Math.hypot(ex, ez) || 1, tt = clamp(((px - ax)*ex + (pz - az)*ez)/(l*l), 0, 1), d = Math.hypot(px - ax - ex*tt, pz - az - ez*tt); if (d < best){ best = d; at = run + tt*l; } run += l; }
+    return at; }
+  function capOf(k, n){ if (n.cap !== undefined) return n.cap; n.cap = -1; if (!k || !n.to) return -1;
+    const K = BIOMES.creeks, L = BIOMES.relief.cut.levels[k], ST = K.stepFt, w = L.warpFt || 0, g = L.acrossFt*0.9, way = n.way || [n, n.to]; let len = 0; const cum = [0]; for (let q = 1; q < way.length; q++){ len += Math.hypot(way[q].x - way[q - 1].x, way[q].z - way[q - 1].z); cum.push(len); }
+    const m = Math.max(2, Math.round(len/ST)), NEARC = Math.ceil(K.maxSteps*K.stepFt/K.everyFt) - 1; let x = n.rx, z = n.rz, sg = 1;
+    for (let q = 0; q <= m; q++){ const at = q/m*len; while (sg < way.length - 1 && cum[sg] < at) sg++; const v = (at - cum[sg - 1])/((cum[sg] - cum[sg - 1]) || 1), qx = lerp(way[sg - 1].x, way[sg].x, v), qz = lerp(way[sg - 1].z, way[sg].z, v);
+      if (q) for (let it = 0; it < 4; it++){ const ox = (vn(x/g + 11.3 + k*5.1, z/g - 4.7, 731 + k) - 0.5)*2*w, oz = (vn(x/g - 6.1, z/g + 9.9 + k*3.3, 741 + k) - 0.5)*2*w; x = qx - ox; z = qz - oz; }
+      if (shoreFt(x, z) <= K.tideInFt) break;                                    // by the tide line every stream runs out on its own
+      for (let b = k - 1; b >= 0; b--){ const d = lineFt(b, x, z); if (d > 40) continue; const o = cutTo(b, lnA, lnB), ox = lnX, oz = lnZ;
+        if (!o.to || o.s0 < -200 || !made(hexAt(o.rx, o.rz)) || d > streamHalfFt(b, o) + 2) continue;
+        if (Math.abs(Math.floor(o.rx/K.everyFt) - Math.floor(x/K.everyFt)) > NEARC || Math.abs(Math.floor(o.rz/K.everyFt) - Math.floor(z/K.everyFt)) > NEARC) continue;      // (a stream is traced, and so drawn, only within a few squares of its head: one whose head is further off is not there to run into)
+        if (wayAt(o, ox, oz) <= runTo(b, o) - 1) return n.cap = at; } }            // (only where that line's own stream is still running: it may have none, or have gone into a river, the sea or a bigger stream further up)
+    return -1; }
+  function runTo(k, n){ if (n.run === undefined){ n.run = -1; n.run = netStream(k, n, true); } return n.run; }            // (v124) how far along its way the stream of head n runs before it ends (-1: it has none)
+  function netStream(k, n, measure){            // one stretch of stream: from a valley head to the head its valley runs on to (along its way out, if it winds)
     const K = BIOMES.creeks, NT = K.net, L = BIOMES.relief.cut.levels[k], ST = K.stepFt, w = L.warpFt || 0, g = L.acrossFt*0.9, t = n.to, way = n.way || [n, t];
     const eq = Math.pow(L.acrossFt/BIOMES.relief.cut.levels[BIOMES.relief.cut.levels.length - 1].acrossFt, 2);            // (a bigger valley's head gathers the water of a bigger square: counted in gully heads' worth)
     const fa = netFlow(k, n, NT.hops)*eq, fb = Math.max(fa, (t.joins ? 0 : netFlow(k, t, NT.hops))*eq), pts = []; let len = 0; const cum = [0]; for (let q = 1; q < way.length; q++){ len += Math.hypot(way[q].x - way[q - 1].x, way[q].z - way[q - 1].z); cum.push(len); }
-    const m = Math.max(2, Math.round(len/ST)), thrOf = f => clamp(1 - Math.log(f)/Math.log(NT.runFlow), 0, 1);
-    let bed = 1e9, prev = null, x = 0, z = 0, sg = 1, wasSea = false, wasTide = false;
+    const m = Math.max(2, Math.round(len/ST)), thrOf = f => clamp(1 - Math.log(f)/Math.log(NT.runFlow), 0, 1), cap = capOf(k, n); if (cap === 0) return -1;      // (v124) its head stands in a bigger stream: the water is already in that one
+    if (len < 2*ST && !netUp(k, n).length) return -1;                                               // (v124) a lone head a step or two from the line it joins: a puddle, not a stream
+    let bed = 1e9, prev = null, x = 0, z = 0, sg = 1, wasSea = false, wasTide = false, ran = -1;
     for (let q = 0; q <= m; q++){ const u = q/m, at = u*len; while (sg < way.length - 1 && cum[sg] < at) sg++; const v = (at - cum[sg - 1])/((cum[sg] - cum[sg - 1]) || 1), qx = lerp(way[sg - 1].x, way[sg].x, v), qz = lerp(way[sg - 1].z, way[sg].z, v); if (!q){ x = n.rx; z = n.rz; }
       for (let it = 0; it < 4; it++){ const ox = (vn(x/g + 11.3 + k*5.1, z/g - 4.7, 731 + k) - 0.5)*2*w, oz = (vn(x/g - 6.1, z/g + 9.9 + k*3.3, 741 + k) - 0.5)*2*w; x = qx - ox; z = qz - oz; }      // (each point starts from the one before, so four turns bring it home)
       const d = shoreFt(x, z), base = land(x, z), sea = base < 5, f = lerp(fa, fb, u), thr = thrOf(f);
       if (sea && (base < K.flatToFt || d < -K.tideOutFt)) break;                                     // it has reached the sea (across the flat, to the low-water line)
       if ((wasSea && !sea) || (wasTide && !sea && d > K.tideInFt)) break;                            // or it has been to the tide line: it does not come back up the beach (its bed would have to rise)
+      if (!sea && d < -2 && q) break;                                                                // (v124) or to a rock that stands in the sea: it is at the shore, and it does not cut a canal through the rock
       if (sea) wasSea = true; if (d <= K.tideInFt) wasTide = true;
-      if (q && riverAt(x, z)) { pts.push(x, z, Math.min(bed, base - NT.deepFt[0]), Math.min(NT.wideFt[1], NT.wideFt[0]*Math.pow(f, NT.widePow)), 0); break; }      // or a river: the river carries it on
+      if (q && riverAt(x, z)) { pts.push(x, z, Math.min(bed, base - NT.deepFt[0]), Math.min(NT.wideFt[1], NT.wideFt[0]*Math.pow(f, NT.widePow)), 0); ran = at; break; }      // or a river: the river carries it on
       const slope = prev === null ? 0 : Math.max(0, (prev - base)/ST), wide = Math.min(NT.wideFt[1], NT.wideFt[0]*Math.pow(f, NT.widePow))*(d < 40 ? 1 + (40 - Math.max(d, 0))/50 : 1);
       const deep = Math.min(NT.deepFt[1], NT.deepFt[0]*Math.pow(f, NT.deepPow))*(1 + K.gully*smooth(0.07, 0.35, slope));
       bed = sea ? Math.max(2, Math.min(bed - 0.003*ST, base - K.flatCutFt)) : Math.max(d > K.tideInFt ? 5.03 : K.tideBedFt, Math.min(bed - 0.003*ST, base - deep));
-      pts.push(x, z, bed, wide, (sea ? 4 : thr >= NT.dryFrom ? 2 : 0) | (sea ? 0 : Math.round(thr*31) << 3)); prev = base; }
-    if (pts.length < 2*PT) return;
+      pts.push(x, z, bed, wide, (sea ? 4 : thr >= NT.dryFrom ? 2 : 0) | (sea ? 0 : Math.round(thr*31) << 3)); prev = base; ran = at;
+      if (cap > 0 && at >= cap) break; }                                                                // (v124) it has come to a bigger stream, which carries it on
+    if (pts.length < 2*PT) return -1; if (measure) return ran;
     const rx = pts[0], rz = pts[1]; addCreek(pts, { sx: rx, sz: rz, upFt2: fa*L.acrossFt*L.acrossFt, rain: rainM(rx, rz), run: soilOf(BIOMES.water.runoff, rx, rz), i0: 0, flow: fa }); }
   function netCell(i, j){            // the stretches of stream whose heads lie in this square: every valley, of every size, carries its stream
     const K = BIOMES.creeks, C = BIOMES.relief.cut, f = K.everyFt;
@@ -1909,7 +1940,7 @@ const World = (() => {
     let ph = Math.atan2(p[2], -p[0]); if (ph < 0) ph += Math.PI*2;
     return CONT[Math.min(m.ch - 1, Math.floor(Math.acos(clamp(p[1], -1, 1))/Math.PI*m.ch))*m.cw + (Math.floor(ph/(Math.PI*2)*m.cw) % m.cw)];
   }
-  return { coastKm, mapShoreFt, shoreFt, shoreKind, rockyAt, bigHill, outcrop, scarp, dome, domeBare, domeNear, domesNear, reef, reefSoil: () => rSoil, reefNear, reefsNear, marshAt, marshIsBog: () => mBog, landAt: core, landCoarse, downAt, __dbg: {            /* for the checks in _proofs/v117-water (node): not used by the game */ cutNode, cutTo, cutCell, cutBlock, landCut, top: (x, z) => { reliefTop(x, z); return [rBase, rHills]; }, lines, run: (x, z) => { const f = downAt(x, z); return [f, dRun]; }, lineNear: (r, x, z) => [lineNear(r, x, z), lnAlong], down: () => downGrid(), sizes: () => ({ heads: cutNodes.map(m => m ? m.size : 0), squares: cutCells.map(m => m ? m.size : 0), blocks: cutBlocks.map(m => m ? m.size : 0) }), layers: () => reliefLayers(), consts: () => ({ KM, BASE, HALF }) }, downInfo: () => { const D = downGrid(); return D.none ? null : { squares: D.n*D.n, land: D.land, raisedOver8ft: D.raised, mostFt: Math.round(D.most) }; }, streamEnds: (x, z, r) => { const C = BIOMES.relief.cut, k0 = C.levels.length - 1, g = C.levels[k0].acrossFt, out = { heads: 0, toSea: 0, inland: [], hops: 0, river: 0 };
+  return { coastKm, mapShoreFt, shoreFt, shoreKind, rockyAt, bigHill, outcrop, scarp, dome, domeBare, domeNear, domesNear, reef, reefSoil: () => rSoil, reefNear, reefsNear, marshAt, marshIsBog: () => mBog, landAt: core, landCoarse, downAt, __dbg: { creeks: () => creeks, capOf, lineFt,             /* for the checks in _proofs/v117-water (node): not used by the game */ cutNode, cutTo, cutCell, cutBlock, landCut, top: (x, z) => { reliefTop(x, z); return [rBase, rHills]; }, lines, run: (x, z) => { const f = downAt(x, z); return [f, dRun]; }, lineNear: (r, x, z) => [lineNear(r, x, z), lnAlong], down: () => downGrid(), sizes: () => ({ heads: cutNodes.map(m => m ? m.size : 0), squares: cutCells.map(m => m ? m.size : 0), blocks: cutBlocks.map(m => m ? m.size : 0) }), layers: () => reliefLayers(), consts: () => ({ KM, BASE, HALF }) }, downInfo: () => { const D = downGrid(); return D.none ? null : { squares: D.n*D.n, land: D.land, raisedOver8ft: D.raised, mostFt: Math.round(D.most) }; }, streamEnds: (x, z, r) => { const C = BIOMES.relief.cut, k0 = C.levels.length - 1, g = C.levels[k0].acrossFt, out = { heads: 0, toSea: 0, inland: [], hops: 0, river: 0 };
       for (let b = Math.floor((z - r)/g); b <= Math.floor((z + r)/g); b++) for (let a = Math.floor((x - r)/g); a <= Math.floor((x + r)/g); a++){ let k = k0, n = cutTo(k, a, b), h = 0; if (!n.to || n.s0 < 0) continue; out.heads++;
         while (n.to && h < 6000){ const t = n.to; h++; if (t.shore){ n = t; break; } if (t.joins){ k = t.joins.k; n = cutTo(k, t.joins.a, t.joins.b); continue; } n = cutTo(k, t.a, t.b); }
         out.hops += h; const d = shoreFt(n.rx, n.rz); if (d < 30) out.toSea++; else if (riverAt(n.rx, n.rz)){ out.toSea++; out.river++; } else if (out.inland.length < 400) out.inland.push([Math.round(n.rx), Math.round(n.rz), Math.round(d), Math.round(n.T), k]); } return out; }, armFt, riverLines: () => lines().valleys.filter(v => v.river).map(v => ({ name: v.name, pts: v.p, wideFt: v.river.wideFt })), armLines: () => arms().map(a => ({ pts: a.p, halfFt: a.half })), reliefFt, mPerFt: () => 0.3048*SCALE/((BIOMES.relief && BIOMES.relief.tall) || 1), genOf, riverNear, oldAt, sandAt, waterAt, wetAt, waterNear, watersNear, waterStats, warmWater, setRough, groundOdds, growAt, isLand, height, typeAt, rockAt, soilAt, density, treeAt, groundAt, hexAt, made, madeAt, centreFt, startOf, tileAt, tileCentre, tileDist,
@@ -4388,7 +4419,7 @@ function horizonStep(){            // every frame: a few hundred corners of the 
 window.__twHorizon = () => W.hz ? { at: W.hzAt, shown: W.hz.visible, highestFt: Math.round(Math.max(...W.hz.geometry.attributes.position.array.filter((v, i) => i % 3 === 1))), corners: HZ.NA*HZ.NR } : null;
 function swState(){                // what the world remembers, for the save
   harvestWindow(); harvestTiles(); harvestTrees();
-  return { gen: 11, base: [W.base.x, W.base.z], pad: W.padG, boat: W.boatG, edits: [...W.edits], treeLog: W.treeLog, rockLog: W.rockLog, found: [...W.foundAll], scale: World.scale };
+  return { gen: 12, base: [W.base.x, W.base.z], pad: W.padG, boat: W.boatG, edits: [...W.edits], treeLog: W.treeLog, rockLog: W.rockLog, found: [...W.foundAll], scale: World.scale };
 }
 /* the far land: the same map carried on past the circle, coarse and not walkable, so the hills and the shore go on to
    the horizon. It is not drawn where the full land is. */
@@ -5139,7 +5170,7 @@ function loadGame(){
   if (!d || d.v !== 1) return false;
   W.loading = true;
   try {
-    if ((d.hex || 0) && !(d.sw && d.sw.gen === 11)){ d.fresh = true; d.sw = null; }            // a world from before this land was shaped (v101 to v114): the player and the bag carry over, the land starts fresh
+    if ((d.hex || 0) && !(d.sw && d.sw.gen === 12)){ d.fresh = true; d.sw = null; }            // a world from before this land was shaped (v101 to v114): the player and the bag carry over, the land starts fresh
     if (d.sw && d.sw.scale && typeof World !== 'undefined' && d.sw.scale !== World.scale) World.setScale(d.sw.scale);
     if (d.seed !== W.seedStr || (d.sw ? W.stamp !== d.at : (d.hex || 0) !== (W.hex || 0) || (W.sw && !d.fresh))){ ui.seed.value = d.seed;
       newWorld(d.seed, d.hex || 0, d.sw ? d.sw.base : null, d.sw ? { ...d.sw, stamp: d.at } : null); if (spiritsReady){ spawnSpirits(); plantTufts(); } }
@@ -5213,7 +5244,7 @@ function bootWorld(){
   if (typeof World === 'undefined') return [0];
   const sc = /[?#&]scale=(\d+)/.exec(location.search + location.hash); if (sc) World.setScale(+sc[1]);       // 8 is the world's real scale. Another number only helps to look at the map's shapes quickly
   let d = null; try { d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch(e){}
-  if (d && d.v === 1){ if (!d.sw || d.sw.gen !== 11) return [d.hex || 0]; if (d.sw.scale) World.setScale(d.sw.scale); if (d.seed) ui.seed.value = d.seed; return [d.hex, d.sw.base, { ...d.sw, stamp: d.at }]; }
+  if (d && d.v === 1){ if (!d.sw || d.sw.gen !== 12) return [d.hex || 0]; if (d.sw.scale) World.setScale(d.sw.scale); if (d.seed) ui.seed.value = d.seed; return [d.hex, d.sw.base, { ...d.sw, stamp: d.at }]; }
   const m = /[?#&]hex=(\d+)/.exec(location.search + location.hash), want = m ? +m[1] : World.start;
   return [World.list().some(h => h.id === want && h.playable) ? want : World.start];
 }

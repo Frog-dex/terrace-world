@@ -1618,11 +1618,21 @@ const World = (() => {
      A stream is still a row of points (x, z, bed, width, flags) like any creek: flag 2 a reach that can lie dry
      (thr over creeks.net.dryFrom), 4 on the tidal flat, and its threshold in the bits above (x 31). It ends at the
      sea, or at one of the map's rivers. */
-  function netUp(k, n){            // the heads whose valleys run on to this one
-    if (n.up) return n.up; const u = [], R = wayR(k);
-    for (let b = n.b - 2; b <= n.b + 2; b++) for (let a = n.a - 2; a <= n.a + 2; a++){ if (a === n.a && b === n.b) continue; const m = cutTo(k, a, b); if (m.to === n && !m.long && capOf(k, m) < 0) u.push(m); }
-    for (let bj = Math.floor((n.b - R)/BLK); bj <= Math.floor((n.b + R)/BLK); bj++) for (let bi = Math.floor((n.a - R)/BLK); bi <= Math.floor((n.a + R)/BLK); bi++) for (const m of cutBlock(k, bi, bj)) if (m.to === n && capOf(k, m) < 0) u.push(m);
-    return n.up = u; }
+  const sameHead = (p, q) => p === q || (!!p && !!q && p.x === q.x && p.z === q.z);            // (v125)
+  /* (v125) Tracing a long stream asks for the land along miles of it, and every spot asked fills the valleys' memory
+     with heads far from here (one window at Reedharbour: 21,600 heads before, 35,400 after: 5 MB). Once the streams
+     round a spot are traced, what is far from it is let go again. */
+  function trimCut(x, z){ const C = BIOMES.relief.cut, CAP = C.keepHeads || [3000, 3000, 8000, 6000], KEEP = C.keepSquares || [4, 8, 20, 36];
+    for (let k = 0; k < C.levels.length; k++){ const f = C.levels[k].acrossFt, i = Math.floor(x/f), j = Math.floor(z/f), M = cutNodes[k], S = cutCells[k];
+      if (M && M.size > CAP[k]) forgetFar(M, i, j, KEEP[k], 65536, 32768); if (S && S.size > CAP[k]/8) forgetFar(S, i, j, KEEP[k], 65536, 32768); cutLi[k] = cutLj[k] = NaN; } }
+  function netUp0(k, n){            // the heads whose valleys run on to this one
+    if (n.up0) return n.up0; const u = [], R = wayR(k);
+    for (let b = n.b - 2; b <= n.b + 2; b++) for (let a = n.a - 2; a <= n.a + 2; a++){ if (a === n.a && b === n.b) continue; const m = cutTo(k, a, b); if (sameHead(m.to, n) && !m.long) u.push(m); }
+    for (let bj = Math.floor((n.b - R)/BLK); bj <= Math.floor((n.b + R)/BLK); bj++) for (let bi = Math.floor((n.a - R)/BLK); bi <= Math.floor((n.a + R)/BLK); bi++) for (const m of cutBlock(k, bi, bj)) if (sameHead(m.to, n)) u.push(m);
+    return n.up0 = u; }
+  function netUp(k, n){ return n.up || (n.up = netUp0(k, n).filter(m => capOf(k, m) < 0 || m.capSib)); }            // (v124) and of those, the ones whose water really comes: a stream that has gone into another hands nothing on
+  function rawFlow(k, n, d){            // (v125) how many heads lie upstream, counting d stretches, whoever joins whom: it settles which of two streams of one size carries the other on, and must not depend on the answer
+    if (d <= 0) return 1; if (!n.fd0) n.fd0 = new Float32Array(BIOMES.creeks.net.hops + 1); if (n.fd0[d]) return n.fd0[d]; let f = 1; for (const m of netUp0(k, n)) f += rawFlow(k, m, d - 1); return n.fd0[d] = f; }
   function netFlow(k, n, d){            // how many heads drain to this one, counting d stretches upstream
     if (d <= 0) return 1; const D = BIOMES.creeks.net.hops; if (!n.fd) n.fd = new Float32Array(D + 1); if (n.fd[d]) return n.fd[d];
     let f = 1; for (const m of netUp(k, n)) f += netFlow(k, m, d - 1); return n.fd[d] = f; }
@@ -1638,6 +1648,12 @@ const World = (() => {
     const px = x + (vn(x/g + 11.3 + k*5.1, z/g - 4.7, 731 + k) - 0.5)*2*w, pz = z + (vn(x/g - 6.1, z/g + 9.9 + k*3.3, 741 + k) - 0.5)*2*w, S = cutCell(k, Math.floor(px/f), Math.floor(pz/f)); let best = 1e18; lnX = px; lnZ = pz;
     for (let q = 0; q < S.length; q += 8){ const ax = S[q], az = S[q + 1], ex = S[q + 3] - ax, ez = S[q + 4] - az, tt = clamp(((px - ax)*ex + (pz - az)*ez)/(ex*ex + ez*ez || 1), 0, 1), dx = px - ax - ex*tt, dz = pz - az - ez*tt, d2 = dx*dx + dz*dz; if (d2 < best){ best = d2; lnA = S[q + 6]; lnB = S[q + 7]; } }
     return Math.sqrt(best); }
+  function lineFtOther(k, x, z, n){ const L = BIOMES.relief.cut.levels[k], f = L.acrossFt, w = L.warpFt || 0, g = f*0.9;
+    const px = x + (vn(x/g + 11.3 + k*5.1, z/g - 4.7, 731 + k) - 0.5)*2*w, pz = z + (vn(x/g - 6.1, z/g + 9.9 + k*3.3, 741 + k) - 0.5)*2*w, S = cutCell(k, Math.floor(px/f), Math.floor(pz/f)); let best = 1e18; lnX = px; lnZ = pz;
+    for (let q = 0; q < S.length; q += 8){ const a = S[q + 6], b = S[q + 7]; if (a === n.a && b === n.b) continue; const ax = S[q], az = S[q + 1], ex = S[q + 3] - ax, ez = S[q + 4] - az, tt = clamp(((px - ax)*ex + (pz - az)*ez)/(ex*ex + ez*ez || 1), 0, 1), dx = px - ax - ex*tt, dz = pz - az - ez*tt, d2 = dx*dx + dz*dz; if (d2 >= best || d2 > 1600) continue;
+      const o = cutTo(k, a, b); if (sameHead(o, n.to) || sameHead(o.to, n)) continue; best = d2; lnA = a; lnB = b; }
+    return Math.sqrt(best); }
+  function halfFt0(k, m){ const NT = BIOMES.creeks.net, C = BIOMES.relief.cut.levels, eq = Math.pow(C[k].acrossFt/C[C.length - 1].acrossFt, 2); return Math.min(NT.wideFt[1], NT.wideFt[0]*Math.pow(rawFlow(k, m, NT.hops)*eq, NT.widePow))/2; }
   function streamHalfFt(k, m){ const NT = BIOMES.creeks.net, C = BIOMES.relief.cut.levels, eq = Math.pow(C[k].acrossFt/C[C.length - 1].acrossFt, 2); return Math.min(NT.wideFt[1], NT.wideFt[0]*Math.pow(netFlow(k, m, NT.hops)*eq, NT.widePow))/2; }
   function wayAt(o, px, pz){            // how far along head o's way the spot (in that level's own winding space) lies
     const way = o.way || [o, o.to]; let best = 1e18, at = 0, run = 0;
@@ -1645,22 +1661,23 @@ const World = (() => {
     return at; }
   function capOf(k, n){ if (n.cap !== undefined) return n.cap; n.cap = -1; if (!k || !n.to) return -1;
     const K = BIOMES.creeks, L = BIOMES.relief.cut.levels[k], ST = K.stepFt, w = L.warpFt || 0, g = L.acrossFt*0.9, way = n.way || [n, n.to]; let len = 0; const cum = [0]; for (let q = 1; q < way.length; q++){ len += Math.hypot(way[q].x - way[q - 1].x, way[q].z - way[q - 1].z); cum.push(len); }
-    const m = Math.max(2, Math.round(len/ST)), NEARC = Math.ceil(K.maxSteps*K.stepFt/K.everyFt) - 1; let x = n.rx, z = n.rz, sg = 1;
+    const m = Math.max(2, Math.round(len/ST)), H = BIOMES.creeks.net.hops, mine = rawFlow(k, n, H), key = (n.a + 32768)*65536 + n.b + 32768; let x = n.rx, z = n.rz, sg = 1;
     for (let q = 0; q <= m; q++){ const at = q/m*len; while (sg < way.length - 1 && cum[sg] < at) sg++; const v = (at - cum[sg - 1])/((cum[sg] - cum[sg - 1]) || 1), qx = lerp(way[sg - 1].x, way[sg].x, v), qz = lerp(way[sg - 1].z, way[sg].z, v);
       if (q) for (let it = 0; it < 4; it++){ const ox = (vn(x/g + 11.3 + k*5.1, z/g - 4.7, 731 + k) - 0.5)*2*w, oz = (vn(x/g - 6.1, z/g + 9.9 + k*3.3, 741 + k) - 0.5)*2*w; x = qx - ox; z = qz - oz; }
-      if (shoreFt(x, z) <= K.tideInFt) break;                                    // by the tide line every stream runs out on its own
       for (let b = k - 1; b >= 0; b--){ const d = lineFt(b, x, z); if (d > 40) continue; const o = cutTo(b, lnA, lnB), ox = lnX, oz = lnZ;
         if (!o.to || o.s0 < -200 || !made(hexAt(o.rx, o.rz)) || d > streamHalfFt(b, o) + 2) continue;
-        if (Math.abs(Math.floor(o.rx/K.everyFt) - Math.floor(x/K.everyFt)) > NEARC || Math.abs(Math.floor(o.rz/K.everyFt) - Math.floor(z/K.everyFt)) > NEARC) continue;      // (a stream is traced, and so drawn, only within a few squares of its head: one whose head is further off is not there to run into)
-        if (wayAt(o, ox, oz) <= runTo(b, o) - 1) return n.cap = at; } }            // (only where that line's own stream is still running: it may have none, or have gone into a river, the sea or a bigger stream further up)
+        if (wayAt(o, ox, oz) <= runTo(b, o) - 1) return n.cap = at; }            // (only where that line's own stream is still running: it may have none, or have gone into a river, the sea or a bigger stream further up)
+      { const d = lineFtOther(k, x, z, n); if (d < 40){ const o = cutTo(k, lnA, lnB), ox = lnX, oz = lnZ;      // (v125) and a stream of its own size that gathers more water (or, the same, the one that comes first in the list): one of two that cross must carry the other on
+          if (o.to && o.s0 >= -200 && made(hexAt(o.rx, o.rz)) && d <= halfFt0(k, o) + 2){ const theirs = rawFlow(k, o, H);
+            if ((theirs > mine || (theirs === mine && (o.a + 32768)*65536 + o.b + 32768 < key)) && wayAt(o, ox, oz) <= runTo(k, o) - 1){ if (sameHead(o.to, n.to)) n.capSib = true; return n.cap = at; } } } } }      // (capSib: the two were bound for the same head, so its water still comes there)
     return -1; }
   function runTo(k, n){ if (n.run === undefined){ n.run = -1; n.run = netStream(k, n, true); } return n.run; }            // (v124) how far along its way the stream of head n runs before it ends (-1: it has none)
   function netStream(k, n, measure){            // one stretch of stream: from a valley head to the head its valley runs on to (along its way out, if it winds)
     const K = BIOMES.creeks, NT = K.net, L = BIOMES.relief.cut.levels[k], ST = K.stepFt, w = L.warpFt || 0, g = L.acrossFt*0.9, t = n.to, way = n.way || [n, t];
     const eq = Math.pow(L.acrossFt/BIOMES.relief.cut.levels[BIOMES.relief.cut.levels.length - 1].acrossFt, 2);            // (a bigger valley's head gathers the water of a bigger square: counted in gully heads' worth)
-    const fa = netFlow(k, n, NT.hops)*eq, fb = Math.max(fa, (t.joins ? 0 : netFlow(k, t, NT.hops))*eq), pts = []; let len = 0; const cum = [0]; for (let q = 1; q < way.length; q++){ len += Math.hypot(way[q].x - way[q - 1].x, way[q].z - way[q - 1].z); cum.push(len); }
+    const fa = measure ? 1 : netFlow(k, n, NT.hops)*eq, fb = measure ? 1 : Math.max(fa, (t.joins ? 0 : netFlow(k, t, NT.hops))*eq), pts = [];      /* (how far it runs does not depend on how much it carries, and asking would go round in a circle) */ let len = 0; const cum = [0]; for (let q = 1; q < way.length; q++){ len += Math.hypot(way[q].x - way[q - 1].x, way[q].z - way[q - 1].z); cum.push(len); }
     const m = Math.max(2, Math.round(len/ST)), thrOf = f => clamp(1 - Math.log(f)/Math.log(NT.runFlow), 0, 1), cap = capOf(k, n); if (cap === 0) return -1;      // (v124) its head stands in a bigger stream: the water is already in that one
-    if (len < 2*ST && !netUp(k, n).length) return -1;                                               // (v124) a lone head a step or two from the line it joins: a puddle, not a stream
+    if (len < 2*ST && !netUp0(k, n).length) return -1;                                               // (v124) a lone head a step or two from the line it joins: a puddle, not a stream
     let bed = 1e9, prev = null, x = 0, z = 0, sg = 1, wasSea = false, wasTide = false, ran = -1;
     for (let q = 0; q <= m; q++){ const u = q/m, at = u*len; while (sg < way.length - 1 && cum[sg] < at) sg++; const v = (at - cum[sg - 1])/((cum[sg] - cum[sg - 1]) || 1), qx = lerp(way[sg - 1].x, way[sg].x, v), qz = lerp(way[sg - 1].z, way[sg].z, v); if (!q){ x = n.rx; z = n.rz; }
       for (let it = 0; it < 4; it++){ const ox = (vn(x/g + 11.3 + k*5.1, z/g - 4.7, 731 + k) - 0.5)*2*w, oz = (vn(x/g - 6.1, z/g + 9.9 + k*3.3, 741 + k) - 0.5)*2*w; x = qx - ox; z = qz - oz; }      // (each point starts from the one before, so four turns bring it home)
@@ -1672,16 +1689,21 @@ const World = (() => {
       if (q && riverAt(x, z)) { pts.push(x, z, Math.min(bed, base - NT.deepFt[0]), Math.min(NT.wideFt[1], NT.wideFt[0]*Math.pow(f, NT.widePow)), 0); ran = at; break; }      // or a river: the river carries it on
       const slope = prev === null ? 0 : Math.max(0, (prev - base)/ST), wide = Math.min(NT.wideFt[1], NT.wideFt[0]*Math.pow(f, NT.widePow))*(d < 40 ? 1 + (40 - Math.max(d, 0))/50 : 1);
       const deep = Math.min(NT.deepFt[1], NT.deepFt[0]*Math.pow(f, NT.deepPow))*(1 + K.gully*smooth(0.07, 0.35, slope));
-      bed = sea ? Math.max(2, Math.min(bed - 0.003*ST, base - K.flatCutFt)) : Math.max(d > K.tideInFt ? 5.03 : K.tideBedFt, Math.min(bed - 0.003*ST, base - deep));
+      bed = sea ? Math.max(2, Math.min(bed - 0.003*ST, base - K.flatCutFt)) : Math.max(d > K.tideInFt || mapShoreFt(x, z) > BIOMES.shore.rangeFt ? 5.03 : K.tideBedFt, Math.min(bed - 0.003*ST, base - deep));      // (v125: under the high-water line only where the map's own shore may wander. A wide stream's mouth must not move the map's coast)
       pts.push(x, z, bed, wide, (sea ? 4 : thr >= NT.dryFrom ? 2 : 0) | (sea ? 0 : Math.round(thr*31) << 3)); prev = base; ran = at;
       if (cap > 0 && at >= cap) break; }                                                                // (v124) it has come to a bigger stream, which carries it on
     if (pts.length < 2*PT) return -1; if (measure) return ran;
-    const rx = pts[0], rz = pts[1]; addCreek(pts, { sx: rx, sz: rz, upFt2: fa*L.acrossFt*L.acrossFt, rain: rainM(rx, rz), run: soilOf(BIOMES.water.runoff, rx, rz), i0: 0, flow: fa }); }
-  function netCell(i, j){            // the stretches of stream whose heads lie in this square: every valley, of every size, carries its stream
-    const K = BIOMES.creeks, C = BIOMES.relief.cut, f = K.everyFt;
-    for (let k = 0; k < C.levels.length; k++){ const g = C.levels[k].acrossFt, w = (C.levels[k].warpFt || 0)/g + 1;
-      for (let b = Math.floor(j*f/g - w); b <= Math.floor((j + 1)*f/g + w); b++) for (let a = Math.floor(i*f/g - w); a <= Math.floor((i + 1)*f/g + w); a++){ const n = cutTo(k, a, b);
-        if (!n.to || Math.floor(n.rx/f) !== i || Math.floor(n.rz/f) !== j || !made(hexAt(n.rx, n.rz)) || n.s0 < -200) continue; netStream(k, n); } } }
+    const rx = pts[0], rz = pts[1], C = () => ({ sx: rx, sz: rz, upFt2: fa*L.acrossFt*L.acrossFt, rain: rainM(rx, rz), run: soilOf(BIOMES.water.runoff, rx, rz), i0: 0, flow: fa, lev: k });
+    if (pts.length <= 1000*PT) addCreek(pts, C()); else for (let o = 0; o + PT < pts.length; o += 999*PT) addCreek(pts.slice(o, o + 1000*PT), C()); }      // (v125) a long stream is filed in pieces: a creek's stretches are numbered up to 1,024
+  /* (v125) Every stretch of stream that PASSES THROUGH this square, whatever square its head lies in (each traced once).
+     Until now a stretch was traced when the square of its head was: a long stream (a great valley's, a trough's) was
+     drawn only near its head, and the land at a spot depended on what had been looked at before it. */
+  const sDone = new Set();
+  function netCell(i, j){ const K = BIOMES.creeks, C = BIOMES.relief.cut, f = K.everyFt, RCH = 34;            // (RCH: half the widest stream and its bank)
+    for (let k = 0; k < C.levels.length; k++){ const g = C.levels[k].acrossFt, w = (C.levels[k].warpFt || 0) + RCH;
+      for (let cj = Math.floor((j*f - w)/g); cj <= Math.floor(((j + 1)*f + w)/g); cj++) for (let ci = Math.floor((i*f - w)/g); ci <= Math.floor(((i + 1)*f + w)/g); ci++){ const S = cutCell(k, ci, cj);
+        for (let q = 0; q < S.length; q += 8){ const key = (k*65536 + S[q + 6] + 32768)*65536 + S[q + 7] + 32768; if (sDone.has(key)) continue; sDone.add(key);
+          const n = cutTo(k, S[q + 6], S[q + 7]); if (!n.to || !made(hexAt(n.rx, n.rz)) || n.s0 < -200) continue; netStream(k, n); } } } }
   function traceCell(i, j){ const K = BIOMES.creeks, f = K.everyFt; riverCell(i, j);
     if (K.net && BIOMES.relief.cut) netCell(i, j); else for (let g = 0; g < (K.springs || 1); g++) traceSpring(i, j, g);
     for (let g = 0; g < (K.seeds || 0); g++){ const T = 5000 + g*1000, a0 = i + K.shift[0], b0 = j + K.shift[1], sx = (i + hash(a0, b0, T + 401))*f, sz = (j + hash(a0, b0, T + 402))*f;      // more rain followed downhill, unseen, to find the hollows that hold a pond
@@ -1689,8 +1711,9 @@ const World = (() => {
   function ensureWater(x, z){            // every creek that could reach this spot has been traced
     const f = BIOMES.creeks.everyFt, ci = Math.floor(x/f), cj = Math.floor(z/f); if (ci === eCi && cj === eCj) return; eCi = ci; eCj = cj;
     const R = Math.ceil(BIOMES.creeks.maxSteps*BIOMES.creeks.stepFt/f) + 1;
-    if (cDone.size > 6000){ cDone.clear(); cBuckets.clear(); creeks.length = 0; ponds.length = 0; falls.length = 0; lBa = NaN; }      // far travelled: start the memory again
-    for (let j = cj - R; j <= cj + R; j++) for (let i = ci - R; i <= ci + R; i++){ const k = bkey(i, j); if (!cDone.has(k)){ cDone.add(k); traceCell(i, j); } }
+    if (cDone.size > 6000){ cDone.clear(); sDone.clear(); cBuckets.clear(); creeks.length = 0; ponds.length = 0; falls.length = 0; lBa = NaN; }      // far travelled: start the memory again
+    let fresh = false; for (let j = cj - R; j <= cj + R; j++) for (let i = ci - R; i <= ci + R; i++){ const k = bkey(i, j); if (!cDone.has(k)){ cDone.add(k); traceCell(i, j); fresh = true; } }
+    if (fresh) trimCut(x, z);
     lBa = NaN;                         // (new creeks may have joined the square last looked at)
   }
   /* the squares just past the ones a spot needs, traced a few at a time (the game calls this every frame as she walks,
@@ -1729,8 +1752,8 @@ const World = (() => {
      want to see the ocean, see more sand"). The game moves the sea up and down (biomes.tide); the land does not change.
      A creek's channel carries on across the ground the tide uncovers, a foot into the sand. */
   function tideCut(x, z, h){ if (waterAt(x, z) !== 1 || wBed >= h) return h; return Math.max(2, wBed + (h - wBed)*smooth(wHalf, wHalf + 2.5, wDist)); }
-  function height(x, z, bump){ const h = core(x, z, bump); return h >= 5 ? withWater(x, z, h) : h >= BIOMES.creeks.flatToFt ? tideCut(x, z, h) : h; }
-  function setRough(fn){ ROUGH = fn || null; cDone.clear(); cBuckets.clear(); creeks.length = 0; ponds.length = 0; falls.length = 0; eCi = eCj = lBa = lBb = NaN; lB = null; }      // (the creeks are traced again on the land with its hills)
+  function height(x, z, bump){ const h = core(x, z, bump); if (h < 5) return h >= BIOMES.creeks.flatToFt ? tideCut(x, z, h) : h; const r = withWater(x, z, h); return r < 5.02 && mapShoreFt(x, z) > BIOMES.shore.rangeFt + 2 ? 5.02 : r; }      // (v125: a stream's bed never takes land below the sea where the map's shore cannot wander to: a wide stream's mouth reached past it)
+  function setRough(fn){ ROUGH = fn || null; cDone.clear(); sDone.clear(); cBuckets.clear(); creeks.length = 0; ponds.length = 0; falls.length = 0; eCi = eCj = lBa = lBb = NaN; lB = null; }      // (the creeks are traced again on the land with its hills)
   // for the game: [how wet 0..1, flow x, flow z, 1 for a pond, how near the bank 0..1, the level drawn, the water's width in feet, feet inside the water's edge (minus: outside), 0..1 at a waterfall]
   const wOut = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];            // (the last two: 1 in a reach that is dry in dry weather; and the wetness at which the water there starts to run, 0 always .. 1 only in the heaviest rain)
   function wetAt(x, z){ const k = waterAt(x, z); if (!k){ wOut[0] = wOut[4] = wOut[8] = 0; wOut[7] = -99; return wOut; } wOut[0] = 1 - smooth(wHalf*0.75, wHalf + 1.2, wDist); wOut[1] = wDx; wOut[2] = wDz; wOut[3] = k === 2 ? 1 : 0; wOut[4] = 1 - smooth(wHalf + 1, wHalf + 9, wDist); wOut[5] = wBed; wOut[6] = wSize; wOut[7] = wHalf - wDist; wOut[8] = wFall; wOut[9] = wDry; wOut[10] = wThr; return wOut; }
@@ -4419,7 +4442,7 @@ function horizonStep(){            // every frame: a few hundred corners of the 
 window.__twHorizon = () => W.hz ? { at: W.hzAt, shown: W.hz.visible, highestFt: Math.round(Math.max(...W.hz.geometry.attributes.position.array.filter((v, i) => i % 3 === 1))), corners: HZ.NA*HZ.NR } : null;
 function swState(){                // what the world remembers, for the save
   harvestWindow(); harvestTiles(); harvestTrees();
-  return { gen: 12, base: [W.base.x, W.base.z], pad: W.padG, boat: W.boatG, edits: [...W.edits], treeLog: W.treeLog, rockLog: W.rockLog, found: [...W.foundAll], scale: World.scale };
+  return { gen: 13, base: [W.base.x, W.base.z], pad: W.padG, boat: W.boatG, edits: [...W.edits], treeLog: W.treeLog, rockLog: W.rockLog, found: [...W.foundAll], scale: World.scale };
 }
 /* the far land: the same map carried on past the circle, coarse and not walkable, so the hills and the shore go on to
    the horizon. It is not drawn where the full land is. */
@@ -5170,7 +5193,7 @@ function loadGame(){
   if (!d || d.v !== 1) return false;
   W.loading = true;
   try {
-    if ((d.hex || 0) && !(d.sw && d.sw.gen === 12)){ d.fresh = true; d.sw = null; }            // a world from before this land was shaped (v101 to v114): the player and the bag carry over, the land starts fresh
+    if ((d.hex || 0) && !(d.sw && d.sw.gen === 13)){ d.fresh = true; d.sw = null; }            // a world from before this land was shaped (v101 to v114): the player and the bag carry over, the land starts fresh
     if (d.sw && d.sw.scale && typeof World !== 'undefined' && d.sw.scale !== World.scale) World.setScale(d.sw.scale);
     if (d.seed !== W.seedStr || (d.sw ? W.stamp !== d.at : (d.hex || 0) !== (W.hex || 0) || (W.sw && !d.fresh))){ ui.seed.value = d.seed;
       newWorld(d.seed, d.hex || 0, d.sw ? d.sw.base : null, d.sw ? { ...d.sw, stamp: d.at } : null); if (spiritsReady){ spawnSpirits(); plantTufts(); } }
@@ -5244,7 +5267,7 @@ function bootWorld(){
   if (typeof World === 'undefined') return [0];
   const sc = /[?#&]scale=(\d+)/.exec(location.search + location.hash); if (sc) World.setScale(+sc[1]);       // 8 is the world's real scale. Another number only helps to look at the map's shapes quickly
   let d = null; try { d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch(e){}
-  if (d && d.v === 1){ if (!d.sw || d.sw.gen !== 12) return [d.hex || 0]; if (d.sw.scale) World.setScale(d.sw.scale); if (d.seed) ui.seed.value = d.seed; return [d.hex, d.sw.base, { ...d.sw, stamp: d.at }]; }
+  if (d && d.v === 1){ if (!d.sw || d.sw.gen !== 13) return [d.hex || 0]; if (d.sw.scale) World.setScale(d.sw.scale); if (d.seed) ui.seed.value = d.seed; return [d.hex, d.sw.base, { ...d.sw, stamp: d.at }]; }
   const m = /[?#&]hex=(\d+)/.exec(location.search + location.hash), want = m ? +m[1] : World.start;
   return [World.list().some(h => h.id === want && h.playable) ? want : World.start];
 }

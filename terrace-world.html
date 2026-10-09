@@ -6121,11 +6121,21 @@ function renderBag(){
 function clearGhosts(){ document.querySelectorAll('.it.ghost').forEach(e => e.remove()); document.querySelectorAll('.dropMark').forEach(e => e.remove()); if (bagDrag){ bagDrag.el.style.opacity = ''; bagDrag = null; } }
 addEventListener('pointerup', () => { if (bagDrag) setTimeout(() => { if (bagDrag) bagUp(); }, 0); });
 /* Blu, Oct 7: cards live in the card holder, not loose in the pack ("That's the whole point"); and nothing is "strapped to pack" any more */
+{ const _ac = addCard; addCard = function(g, code){ const hd = W && (W.modCards || findHolder());
+    if (hd && hd.grid === g){ const o = g.items.find(q => q.id === 'card' && q.code === code); if (o){ o.n = (o.n || 1) + 1; return true; }
+      while (g.w*g.h < DECK.length) g.h++; }            // (a new card always has a pocket, even before the bag has been opened)
+    return _ac(g, code); }; }
+{ const _sp = splitItem; splitItem = function(g, it){ if (it && it.code) return; _sp(g, it); }; }            // a card's copies stay together in its pocket (the game's split makes a pile with no card on it)
 function tidyBag(){
   if (!W || !W.pack) return;
   const hd = W.modCards || findHolder();
-  if (hd && hd.grid) for (const it of W.pack.items.filter(o => o.id === 'card')){ const sp = freeSpot(hd.grid, 'card'); if (!sp) break;
-    W.pack.items.splice(W.pack.items.indexOf(it), 1); it.x = sp.x; it.y = sp.y; it.rot = 0; hd.grid.items.push(it); }
+  if (hd && hd.grid){ const G = hd.grid, seen = {};            // one pocket a card: the same card again is a count on its pocket, so every card fits and none lies in the pack
+    while (G.w*G.h < DECK.length) G.h++;                        // (there are 50 cards and the holder was cut with 49 pockets: it gets another row)
+    for (const it of [...G.items]) if (it.id === 'card'){ const o = seen[it.code]; if (o){ o.n = (o.n || 1) + (it.n || 1); G.items.splice(G.items.indexOf(it), 1); } else seen[it.code] = it; }
+    for (const it of W.pack.items.filter(o => o.id === 'card')){ const o = seen[it.code];
+      if (o){ o.n = (o.n || 1) + (it.n || 1); W.pack.items.splice(W.pack.items.indexOf(it), 1); continue; }
+      const sp = freeSpot(G, 'card'); if (!sp) continue;
+      W.pack.items.splice(W.pack.items.indexOf(it), 1); it.x = sp.x; it.y = sp.y; it.rot = 0; G.items.push(it); seen[it.code] = it; } }
   if (W.strapItem){ const it = W.strapItem, sp = freeSpot(W.pack, it.id); if (sp){ Object.assign(it, sp); W.pack.items.push(it); W.strapItem = null; W.wear.strap = null; composeHero(); } }
 }
 function toggleBag(force){
@@ -6161,6 +6171,7 @@ function renderInfo(){
   if (d.build && g === W.pack) btn('Place', () => { ui.buildItem = it.id; setTool('build'); closeBag(); toast(`Tap the ground to place the ${d.name.toLowerCase()}.`); });
   if (d.w !== d.h) btn('Turn', () => turnItem(g, it));
   if (it.n > 1) btn('Split', () => splitItem(g, it));
+  if (it.code && it.n > 1 && bb.lastChild) bb.lastChild.remove();            // (no Split on a card: its copies stay together in its pocket)
   if (sideGrid() && !(it.id === 'holder' && holderOpen === it)) btn(g === W.pack ? (chestIsOpen ? 'To chest' : 'To holder') : 'To pack', () => moveAcross(g, it));
   if (!inside.on && g === W.pack && !it.code && !it.grid) btn('Drop', () => { g.items.splice(g.items.indexOf(it), 1); dropPile(hero.x + 1.2, hero.z + 1.2, [{ id:it.id, n:it.n }]); bagSel = null; hud(); renderBag(); });
 }

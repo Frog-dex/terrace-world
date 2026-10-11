@@ -3390,7 +3390,7 @@ function fallMesh(){
         float side = min(u, 1.0 - u)*vWH.x, tat = (0.1 + 0.33*vn(vec2(df*1.8 - uTime*2.2, step(0.5, u)*9.0 + vSeed)))*smoothstep(0.02, 0.2, d);      // its two sides hang in tatters (a few inches of them, whatever its width)
         if (side < tat) discard;
         vec3 c = vec3(0.47, 0.75, 0.85); c = mix(c, vec3(0.72, 0.9, 0.94), step(0.46, a)); c = mix(c, vec3(1.0), step(0.66, b)*step(0.38, a));
-        c = mix(c, vec3(1.0), step(vUv.y*vWH.y, min(vWH.y*0.27, 0.6 + 0.5*vn(vec2(uf*1.4 + vSeed, uTime*2.5)))));      // it breaks white at its foot (the last foot or so of it)
+        c = mix(c, vec3(1.0), step(vUv.y*vWH.y, min(vWH.y*0.16, 0.45 + 0.5*vn(vec2(uf*1.4 + vSeed, uTime*2.5)))));      // it breaks white at its foot (the last foot or so of it)
         c = mix(c, vec3(0.93, 0.98, 1.0), smoothstep(0.88, 0.97, vUv.y));                      // and pale where it curls over the lip
         c *= clamp(uLight, 0.0, 1.15);
         if (side < tat + 0.23) c = vec3(0.169, 0.141, 0.4)*clamp(uLight*1.6, 0.1, 1.0);       // the ink line down its two ragged edges
@@ -3405,7 +3405,8 @@ function fallMesh(){
     fragmentShader: `uniform float uTime; uniform vec3 uLight, uFogC; uniform vec2 uFog; varying vec2 vP, vS; varying float vSeed, vDist;
       void main(){ vec2 q = vP*vS; float cap = max(vS.x - vS.y, 0.0), qx = q.x - clamp(q.x, -cap, cap), ft = length(vec2(qx, q.y)), r = ft/vS.y, an = atan(q.y, qx) + q.x*0.13;      // (v120) q: feet from its middle. It is a band along the foot of the fall with round ends; ft: feet from the band's middle line; r: that as a share of its half depth
         float edge = 0.7 + 0.12*sin(an*5.0 + uTime*1.3 + vSeed) + 0.07*sin(an*9.0 - uTime*2.1 + vSeed*2.0);      // a wobbling outline, never a clean edge (soft scallops a few feet long along the band)
-        float boil = step(r, edge*(0.56 + 0.06*sin(uTime*5.0 + an*3.0))), ring = step(r, edge)*step(0.55, fract(ft*0.62 - uTime*0.6 + vSeed))*step(edge*0.5, r);      // (the rings a foot or two apart, whatever its size)
+        float bk = sin(q.x*2.3 + sin(q.y*1.7 + uTime*1.3)*1.4 + vSeed)*sin(q.y*2.9 - uTime*1.1 + sin(q.x*1.3 + vSeed)*1.2);      // (v130) the boil is broken water: soft patches of white that come and go, not a plate (and never squares)
+        float boil = step(r, edge*(0.42 + 0.06*sin(uTime*5.0 + an*3.0)))*step(-1.3 + 4.2*r, bk), ring = step(r, edge)*step(0.6, fract(ft*0.62 - uTime*0.6 + vSeed))*step(edge*0.34, r);      // (the rings a foot or two apart, whatever its size)
         if (boil + ring < 0.5) discard;
         vec3 c = mix(vec3(0.82, 0.94, 0.97), vec3(1.0), boil)*clamp(uLight, 0.0, 1.15);
         gl_FragColor = vec4(mix(c, uFogC, smoothstep(uFog.x, uFog.y, vDist)), 1.0); }` });
@@ -3429,24 +3430,24 @@ const fallsRunning = () => { let k = 0; if (!FALL_SHEET) return 0; if (W.falls) 
      The water's edge wanders in and out along them, and gravel lies along the water only here and there, painted by the
      ground. The water is coloured as the sea is: the bed seen through it, the sky on it.
    - A FALL: the ribbon runs out to a lip and starts again at the foot; between them hangs the illustrated sheet
-     (fallMesh); and round it stands rock of its own (alcoveMesh): a wall behind the water with a notch for the stream
-     and a shoulder each side, and two flanks that come forward round the pool. The land's steps there are under it.
+     (fallMesh); and round it stands rock of its own (fallRocks, v130): the world's own boulders piled behind the water
+     from foot to lip and down both sides. The land's steps there are under them.
      A creek that comes in above a bigger stream falls into it the same way.
    The land only makes the room (the world module cuts the channel). One draw call for every stream and bank in the
    window, one for the falls, one for their foam, one for their rock. */
-const STREAM_V = 8000;            // the most points the streams' mesh holds (two to a cross-section)
-let streamM = null, alcoveM = null;
+const STREAM_V = 12000;            // the most points the streams' mesh holds (two to a cross-section)
+let streamM = null, fallRockM = null;
 function streamMesh(){
   if (streamM) return streamM;
   const g = new THREE.BufferGeometry(), A = (name, c) => { const a = new THREE.BufferAttribute(new Float32Array(STREAM_V*c), c); a.setUsage(THREE.DynamicDrawUsage); g.setAttribute(name, a); };
-  A('position', 3); A('normal', 3); A('aFlow', 4); A('aRun', 1); g.setIndex(new THREE.BufferAttribute(new Uint16Array(STREAM_V*3), 1)); g.setDrawRange(0, 0);
+  A('position', 3); A('normal', 3); A('aFlow', 4); A('aRun', 1); A('aFx', 2); g.setIndex(new THREE.BufferAttribute(new Uint16Array(STREAM_V*3), 1)); g.setDrawRange(0, 0);
   const mat = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: groundRamp, side: THREE.DoubleSide });
   mat.transparent = true; mat.depthWrite = false;      // (v129) so a stream thins out at its edge and fades into the sea at its mouth
   mat.onBeforeCompile = sh => { sh.uniforms.uTime = waterU.uTime; sh.uniforms.uGrain = grainU; sh.uniforms.uRun = creekRunU; sh.uniforms.uSkyC = waterU.uSky; sh.uniforms.uSeaAt = waterU.uWater;
-    sh.vertexShader = 'attribute vec4 aFlow;\nattribute float aRun;\nvarying vec4 vFlow;\nvarying float vRun;\nvarying float vWy;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vFlow = aFlow; vRun = aRun; vWy = position.y;');
+    sh.vertexShader = 'attribute vec4 aFlow;\nattribute float aRun;\nattribute vec2 aFx;\nvarying vec4 vFlow;\nvarying float vRun;\nvarying float vWy;\nvarying vec2 vFx;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vFlow = aFlow; vRun = aRun; vWy = position.y; vFx = aFx;');
     /* vFlow: feet along the stream; where across it (-1 one edge of the water .. 1 the other); half the water's width in feet; how steeply it falls. vRun: how wet the land must be for this spot to run (the same rule as the bed's own:
        creekFlow). The water's colours are the ones the ground used to paint. */
-    sh.fragmentShader = 'uniform sampler2D uGrain;\nuniform float uTime;\nuniform vec2 uRun;\nuniform vec3 uSkyC;\nuniform float uSeaAt;\nvarying vec4 vFlow;\nvarying float vRun;\nvarying float vWy;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+    sh.fragmentShader = 'uniform sampler2D uGrain;\nuniform float uTime;\nuniform vec2 uRun;\nuniform vec3 uSkyC;\nuniform float uSeaAt;\nvarying vec4 vFlow;\nvarying float vRun;\nvarying float vWy;\nvarying vec2 vFx;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       { float ac = abs(vFlow.y); vec3 wc; vec2 al = vec2(vFlow.x, vFlow.y*vFlow.z);
         { /* (v129) Blu: "it needs to look organic. These all look like canals ... Isn't even really matching like the sea." */
           float flowK = clamp((uRun.x - vRun)/uRun.y + 1.0, 0.0, 1.0), wide = smoothstep(0.0, 0.22, flowK)*mix(0.3, 1.0, flowK);      // a thread down the middle of the bed when it has just begun to run, the whole bed when it runs full
@@ -3458,7 +3459,7 @@ function streamMesh(){
           if (ac > edgeAt) discard;
           float e = ac/max(edgeAt, 0.001), rap = smoothstep(0.05, 0.3, vFlow.w);
           /* it thins out to nothing at its edge, and fades away as it comes down to the sea's own level: the sea takes over there (at low tide the sea stands lower, and the stream runs on across the sand) */
-          float seen = (1.0 - 0.9*smoothstep(0.8, 1.0, e))*smoothstep(uSeaAt + 0.05, uSeaAt + 0.6, vWy); if (seen < 0.02) discard;                                      // e: 0 the middle .. 1 the water's edge. rap: white water where the bed is steep
+          float seen = (1.0 - 0.9*smoothstep(0.8, 1.0, e))*smoothstep(uSeaAt + 0.05, uSeaAt + 0.6, vWy)*vFx.y; if (seen < 0.02) discard;                                      // e: 0 the middle .. 1 the water's edge. rap: white water where the bed is steep
           /* coloured as the sea is: the bed seen through the water (red is taken first, then green, so the shallows by the bank are pale and the middle blue-green), and the sky on it at a low angle */
           float depth = min(3.2, (0.3 + 0.11*vFlow.z)*(1.0 - e*e));
           vec3 bottom = mix(vec3(0.55, 0.52, 0.43), vec3(0.36, 0.40, 0.30), smoothstep(0.25, 1.8, depth))*(0.9 + 0.2*n2);
@@ -3467,10 +3468,11 @@ function streamMesh(){
           float nv = abs(dot(normalize(vNormal), normalize(vViewPosition)));
           wc = mix(wc, uSkyC, min(0.04 + 0.96*pow(1.0 - nv, 5.0), 0.5)*0.8);
           /* the grain picture's blue channel is streaks (long one way, fine the other): laid along the stream and slid down it, they are faint threads of lighter water */
-          float st = texture2D(uGrain, vec2(al.y/34.0 + 0.13, (al.x - uTime*(2.6 + 3.0*rap))/44.0)).b, st2 = texture2D(uGrain, vec2(al.y/21.0 + 0.61, (al.x - uTime*(4.1 + 4.0*rap))/27.0)).b;
+          float run = vFx.x - uTime;      /* (v130) seconds: how long the water takes to get here, less the clock. The streaks ride on it, so they move at the water's own speed here and never shear (uTime*speed did, more every minute, wherever the speed changes along a stream: after half an hour they crept the wrong way) */
+          float st = texture2D(uGrain, vec2(al.y/34.0 + 0.13, run*(2.6/44.0))).b, st2 = texture2D(uGrain, vec2(al.y/50.0 + 0.61, run*(4.1/62.0))).b;      /* (the white water's threads are wider and much longer than they were: a third of a foot by three feet, thresholded, read as rows of chevrons across a wide river) */
           float streak = smoothstep(0.6 - 0.14*rap, 0.72 - 0.14*rap, st*0.6 + st2*0.4);
           wc = mix(wc, wc*1.3 + vec3(0.05, 0.09, 0.09), streak*(0.3 + 0.4*rap));
-          wc = mix(wc, vec3(0.93, 0.98, 1.0), rap*smoothstep(0.5, 0.62, st2)*0.85);
+          wc = mix(wc, vec3(0.93, 0.98, 1.0), rap*smoothstep(0.57, 0.67, st2)*0.72);
           wc = mix(wc, vec3(0.9, 0.95, 0.94), smoothstep(0.72, 0.86, e)*smoothstep(0.6, 0.72, st)*0.4);                // a little foam caught near the edge, now and then
           diffuseColor.a = seen;
         }
@@ -3478,91 +3480,128 @@ function streamMesh(){
   const m = new THREE.Mesh(g, mat); m.frustumCulled = false; m.receiveShadow = true; m.matrixAutoUpdate = false; m.renderOrder = -1; scene.add(m);      // (before the sea and anything else that is seen through)
   return streamM = m;
 }
-/* the rock a fall stands in: ONE shape, sized to each fall. x across the fall (the opening between the flanks is 1 wide), y up (0 under the pool, 1 just
-   under the lip), z downstream (0 the wall behind the water, 1 the ends of the two flanks). A wall with a notch for the stream and a shoulder each side,
-   and two flanks that come forward and step down. Its faces are flat (each triangle its own), so it reads as broken rock. */
-function alcoveMesh(){
-  if (alcoveM) return alcoveM;
-  const PL = [[-0.72,1.0],[-0.69,0.7],[-0.66,0.42],[-0.63,0.18],[-0.58,0.03],[-0.46,0],[-0.23,0],[0,0],[0.23,0],[0.46,0],[0.58,0.03],[0.63,0.18],[0.66,0.42],[0.69,0.7],[0.72,1.0]], NV = 5, TH = 0.3;
-  const h3 = (a, b, c) => { const v = Math.sin(a*127.1 + b*311.7 + c*74.7)*43758.5453; return v - Math.floor(v); };
-  const top = k => { const x = PL[k][0], z = PL[k][1]; return Math.abs(x) < 0.5 && z < 0.02 ? 1 : 1.12 - 0.84*Math.max(0, Math.min(1, (z - 0.03)/0.97))**1.1; };      // the notch the stream comes through, a shoulder each side, and the two ribs stepping down toward their ends
-  const out = k => { const x = PL[k][0], z = PL[k][1]; if (z < 0.02) return [0, -1]; if (z < 0.1) return [Math.sign(x)*0.82, -0.57]; return [Math.sign(x), 0]; };            // which way is INTO the rock at a post (away from the pool)
-  /* a post's points from the pool up: the face toward the pool (never out over the pool: its blocks are only ever set BACK, by their own amounts),
-     then the top running back, then the outer face down to the ground. So each rib is a solid piece of rock, not a sheet standing in the air. */
-  const vtx = (k, r) => { const [x, z] = PL[k], T = top(k), o = out(k);
-    if (r === NV + 2) return [x + o[0]*(TH + 0.07), 0, z + o[1]*(TH + 0.07)];
-    if (r === NV + 1) return [x + o[0]*TH, T*(0.93 + 0.07*h3(k, 9, 1)), z + o[1]*TH];
-    const back = 0.015 + 0.075*h3(k >> 1, r >> 1, 5) + (r === NV ? 0.03 : 0);
-    return [x + o[0]*back + (h3(k, r, 1) - 0.5)*0.02, T*r/NV, z + o[1]*back + (h3(k, r, 2) - 0.5)*0.03]; };
-  const pos = [], tri = (a, b, c) => pos.push(...a, ...b, ...c);
-  for (let k = 0; k + 1 < PL.length; k++) for (let r = 0; r <= NV + 1; r++){ const a = vtx(k, r), b = vtx(k + 1, r), c = vtx(k + 1, r + 1), d = vtx(k, r + 1);
-    if ((k + r) & 1){ tri(a, b, c); tri(a, c, d); } else { tri(a, b, d); tri(b, c, d); } }
-  for (const k of [0, PL.length - 1]){ const ring = []; for (let r = 0; r <= NV + 2; r++) ring.push(vtx(k, r)); const mid = [0, 1, 2].map(i => ring.reduce((t, q) => t + q[i], 0)/ring.length);      // the end of each rib, closed
-    if (k) ring.reverse(); for (let r = 0; r < ring.length; r++) tri(mid, ring[r], ring[(r + 1) % ring.length]); }      // (each wound so that it faces out)
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3)); g.computeVertexNormals();
-  /* the ink line round it, as the boulders have: the same shape pushed out a little all over (each point along the mean of the faces that meet there), drawn from inside */
-  const gi = new THREE.BufferGeometry(); { const P = g.attributes.position.array, Nf = g.attributes.normal.array, sum = new Map(), key = i => Math.round(P[i]*500) + ',' + Math.round(P[i + 1]*500) + ',' + Math.round(P[i + 2]*500), O = new Float32Array(P.length);
-    for (let i = 0; i < P.length; i += 3){ const k = key(i), v = sum.get(k) || [0, 0, 0]; v[0] += Nf[i]; v[1] += Nf[i + 1]; v[2] += Nf[i + 2]; sum.set(k, v); }
-    for (let i = 0; i < P.length; i += 3){ const v = sum.get(key(i)), l = Math.hypot(v[0], v[1], v[2]) || 1; O[i] = P[i] + v[0]/l*0.016; O[i + 1] = P[i + 1] + v[1]/l*0.016; O[i + 2] = P[i + 2] + v[2]/l*0.03; }
-    gi.setAttribute('position', new THREE.BufferAttribute(O, 3)); }
-  const mat = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: toonRamp });
-  mat.onBeforeCompile = sh => { sh.vertexShader = 'varying vec3 vAl;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vAl = position;');
-    sh.fragmentShader = 'varying vec3 vAl;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-      diffuseColor.rgb *= mix(0.7, 1.0, smoothstep(0.0, 0.16, vAl.y))*(0.94 + 0.12*step(0.5, fract(sin(floor(vAl.x*5.0 + vAl.z*3.0)*12.9 + floor(vAl.y*4.0)*78.2)*43758.5)));`); };      // wet and darker only at its foot; block to block a little lighter or darker (no level lines: they read as the land's steps)
-  mat.customProgramCacheKey = () => 'fall-rock';
-  const m = new THREE.InstancedMesh(g, mat, FALL_MAX); m.frustumCulled = false; m.receiveShadow = true; m.setColorAt(0, new THREE.Color(1, 1, 1)); m.count = 0; scene.add(m);      // (the colour first: it makes room for as many colours as the mesh counts at that moment)
-  const ink = new THREE.InstancedMesh(gi, outlineMat, FALL_MAX); ink.frustumCulled = false; ink.count = 0; scene.add(ink); m.userData.ink = ink;
-  return alcoveM = m;
+/* THE ROCK OF A FALL (v130): a pile of the world's own boulders, never the land's lined steps and never one stretched shape.
+   Blu, Oct 10: "when you build a waterfall, there needs to be an asset. You need to build the whole surrounding area for waterfalls, like the rock part.
+   That's separate from the terrain." Oct 11, of v128's wall and two slabs: "the space behind it is still fucked".
+   The same lump, colour rule and ink as the big rocks of the world (bigMeshes), so a fall's rock belongs to the place. */
+const FALL_ROCKS = 900;
+function fallRocks(){
+  if (fallRockM) return fallRockM;
+  const B = bigMeshes()[0], m = new THREE.InstancedMesh(B.m.geometry, B.m.material, FALL_ROCKS), o = new THREE.InstancedMesh(B.o.geometry, B.o.material, FALL_ROCKS);
+  m.castShadow = m.receiveShadow = true; m.frustumCulled = o.frustumCulled = false; m.setColorAt(0, new THREE.Color(1, 1, 1)); m.count = o.count = 0; scene.add(m, o);      // (the colour first: it makes room for as many colours as the mesh counts at that moment)
+  return fallRockM = { m, o, n: 0 };
 }
-function buildFalls(){             // the streams, their banks, the falls and their rock in the window, set up again each time the window is made or moves
-  const fm = fallMesh(), foam = fm.userData.foam, rock = alcoveMesh(), sm = streamMesh(), g = sm.geometry, PA = g.attributes.position.array, NA = g.attributes.normal.array, FA = g.attributes.aFlow.array, RA = g.attributes.aRun.array, IA = g.index.array;
-  const LIFT = 0.25, EDGE = 1.0, lim = HALF - 3, bx = W.base.x, bz = W.base.z, got = []; let v = 0, ix = 0;
-  /* one cross-section: the water's two edges. (v128 gave each one a band of gravel with an ink line along both banks: a kerb. Blu: "These all look like
-     canals." A stream's bank is the land's own; gravel lies along it only here and there, painted by the ground.) */
-  const ring = (x, y, z, nx, nz, hw, along, slope, thr) => { if (v + 2 > STREAM_V || ix + 12 > IA.length) return -1; const o = v;
+const _FRH = (a, b, c) => { const q = Math.sin(a*127.1 + b*311.7 + c*74.7)*43758.5453; return q - Math.floor(q); };
+/* one fall's rock. f: where the land's edge is (ex, ez, in the window), which way the water goes (dx, dz), how far the cliff runs on from its edge (X), where the lip
+   stands (vLip, feet from the edge), the water at the lip and at the foot (yTop, yFoot), the water's width (wide), and whether it lands in a bigger stream (join). */
+function fallRockPile(R, f, bx, bz){
+  const nx = -f.dz, nz = f.dx, H = f.yTop - f.yFoot, Wd = f.wide, sd = Math.round((f.ex + bx)*2)*0.37 + Math.round((f.ez + bz)*2)*0.61, yaw = Math.atan2(f.dx, f.dz);
+  const s = clamp(0.4*H + 0.1*Wd, 1.3, 5.2), F = clamp(0.5*Wd, 2.6, 6) + 0.3*H, ny = Math.max(1, Math.ceil((H + 0.6*s)/(1.3*s))), nc = Math.max(1, Math.round(Wd/(1.7*s))), nSide = clamp(Math.round(F/(1.5*s)), 1, 3);
+  _C2s.set(World.rockAt(f.ex + bx, f.ez + bz).col).lerp(_C.set(0xb9b2a0), 0.38);            // the rock of the place, a little paler: clean broken rock, as the big boulders are
+  const put = (u, y, v, sx, sy, sz, k, flat) => { if (R.n >= FALL_ROCKS) return; const x = f.ex + nx*u + f.dx*v, z = f.ez + nz*u + f.dz*v; if (Math.abs(x) > HALF - 2 || Math.abs(z) > HALF - 2) return;
+    _Q.setFromEuler(_E.set(flat ? 0 : (_FRH(sd, k, 1) - 0.5)*0.3, yaw + (_FRH(sd, k, 2) - 0.5)*(flat ? 0.3 : 0.9), flat ? 0 : (_FRH(sd, k, 3) - 0.5)*0.3)); _P.set(x, y, z);
+    _M.compose(_P, _Q, _S.set(sx, sy, sz)); R.m.setMatrixAt(R.n, _M); R.m.setColorAt(R.n, _C.copy(_C2s).multiplyScalar(0.9 + 0.2*_FRH(sd, k, 4)));
+    _M.compose(_P, _Q, _S.set(sx + 0.2, sy + 0.2, sz + 0.2)); R.o.setMatrixAt(R.n, _M); R.n++; };      // the ink line: the same lump, a fifth of a foot bigger all round
+  let k = 0;
+  for (let r = 0; r < ny; r++){ const t = (r + 0.5)/ny, top = r === ny - 1, y0 = f.yFoot - 0.5*s + t*(H + 0.5*s);
+    /* behind the water: from inside the land out to just short of the falling sheet, its top under the stream */
+    for (let c = 0; c < nc; c++){ const u = -Wd/2 + (c + 0.5 + (_FRH(sd, k, 5) - 0.5)*0.3)*Wd/nc, hd = (f.vLip + 0.9)/2, sy = s*(0.75 + 0.3*_FRH(sd, k, 6));
+      put(u, top ? f.yTop - 0.45 - 1.12*sy : Math.min(y0, f.yTop - 0.45 - 1.12*sy), f.vLip - 0.3 - hd, Math.max(Wd/nc*0.62, s*0.8), sy, hd, k++, true); }
+    /* each side of it: standing a little forward of the sheet, further forward toward the foot, and a shoulder above the lip at the top */
+    for (const side of [-1, 1]) for (let q = 0; q < nSide; q++){ const sx = s*(0.85 + 0.4*_FRH(sd, k, 7)), sy = s*(0.75 + 0.35*_FRH(sd, k, 8)), fw = (1 - t)*(1.0 + 0.12*H) + _FRH(sd, k, 9)*0.8 - q*0.9,
+        hd = Math.max(1.2, (f.vLip + 1.6)/2 + 0.4*fw), u = side*(Wd/2 + (0.92 + 1.55*q)*sx);
+      put(u, top ? f.yTop + (q ? -0.3 : 0.25 + 0.6*_FRH(sd, k, 10)) - 0.8*sy : y0 + (_FRH(sd, k, 11) - 0.5)*0.4*s, f.vLip + 0.5 + fw - hd, sx, sy, hd, k++); } }
+  /* fallen blocks beside the pool (not where it lands in a bigger stream) */
+  if (!f.join) for (const side of [-1, 1]) for (let q = 0; q < (H > 5 ? 3 : 2); q++){ const sz = s*(0.34 + 0.3*_FRH(sd, k, 12)), u = side*(Wd/2 + sz*(0.9 + 0.7*_FRH(sd, k, 13)) + q*0.6), v = f.vLip + 1.6 + q*(1.3 + 0.15*H) + _FRH(sd, k, 14)*1.5,
+      x = f.ex + nx*u + f.dx*v, z = f.ez + nz*u + f.dz*v; if (Math.abs(x) > HALF - 3 || Math.abs(z) > HALF - 3){ k++; continue; }
+    put(u, stepAt(x, z) + sz*0.35, v, sz*1.15, sz*0.8, sz, k++); }
+}
+function buildFalls(){             // the streams, the falls and their rock in the window, set up again each time the window is made or moves
+  const fm = fallMesh(), foam = fm.userData.foam, R = fallRocks(), sm = streamMesh(), g = sm.geometry, PA = g.attributes.position.array, NA = g.attributes.normal.array, FA = g.attributes.aFlow.array, RA = g.attributes.aRun.array, XA = g.attributes.aFx.array, IA = g.index.array;
+  const LIFT = 0.25, DS = 1, lim = HALF - 3, bx = W.base.x, bz = W.base.z, got = []; let v = 0, ix = 0;
+  /* one cross-section: the water's two edges. along: feet down the stream; slope: how steeply it falls (white water); thr: how wet the land must be for it to run;
+     tau: seconds the water takes to get here (the streaks ride on it); seen: 0 where a stream begins or ends, 1 along it */
+  const ring = (x, y, z, nx, nz, hw, along, slope, thr, tau, seen) => { if (v + 2 > STREAM_V || ix + 6 > IA.length) return -1; const o = v;
     for (let k = 0; k < 2; k++){ const sd = k ? 1 : -1, q = v*3; PA[q] = x + nx*sd*hw; PA[q + 1] = y; PA[q + 2] = z + nz*sd*hw; NA[q] = 0; NA[q + 1] = 1; NA[q + 2] = 0;
-      FA[v*4] = along; FA[v*4 + 1] = sd; FA[v*4 + 2] = hw; FA[v*4 + 3] = slope; RA[v] = thr; v++; }
+      FA[v*4] = along; FA[v*4 + 1] = sd; FA[v*4 + 2] = hw; FA[v*4 + 3] = slope; RA[v] = thr; XA[v*2] = tau; XA[v*2 + 1] = seen; v++; }
     return o; };
-  const quad = (a, b, c, d) => { IA[ix++] = a; IA[ix++] = b; IA[ix++] = c; IA[ix++] = a; IA[ix++] = c; IA[ix++] = d; };
-  const span = (a, b) => quad(a, a + 1, b + 1, b), capUp = a => {}, capDown = a => {};                                           // the water between two cross-sections
-  const bankOf = wide => 0;
-  const fall = (x, z, dx, dz, yTop, yFoot, wide, dry, thr, join) => { const hh = yTop - yFoot + 0.15; if (hh < 1.2) return; got.push({ x, z, dx, dz, yFoot, hh, wide, dry, thr, join }); };
-  for (const c of World.streamsNear(bx, bz, HALF + 10)){ const p = c.pts, n = p.length/5; if (n < 2) continue; let a = -1, along = 0;
-    for (let q = 0; q < n; q++){ const o = q*5, x = p[o] - bx, z = p[o + 1] - bz; if (q) along += Math.hypot(p[o] - p[o - 5], p[o + 1] - p[o - 4]);
-      if (Math.abs(x) > lim || Math.abs(z) > lim){ if (a >= 0) capDown(a); a = -1; continue; }
-      const qa = Math.max(0, q - 1), qb = Math.min(n - 1, q + 1); let tx = p[qb*5] - p[qa*5], tz = p[qb*5 + 1] - p[qa*5 + 1]; const tl = Math.hypot(tx, tz) || 1; tx /= tl; tz /= tl;
-      const bed = p[o + 2], fl = p[o + 4], thr = fl & 4 ? 0 : (fl >> 3)/31, hw = p[o + 3]/2 + EDGE, bw = fl & 4 ? 0 : bankOf(p[o + 3]), fallUp = q > 0 && (p[o - 1] & 1), fallDn = !!(fl & 1) && q + 1 < n;
-      /* how steeply it falls here, by the stretches either side that are not sheer falls */
-      let drop = 0, run = 0; if (q > 0 && !fallUp){ drop += p[o - 3] - bed; run += Math.hypot(p[o] - p[o - 5], p[o + 1] - p[o - 4]); } if (q + 1 < n && !fallDn){ drop += bed - p[o + 7]; run += Math.hypot(p[o + 5] - p[o], p[o + 6] - p[o + 1]); }
-      const slope = run > 0 ? Math.max(0, drop/run) : 0; let y = bed + LIFT + Math.min(1.4, 1.7*slope);
-      /* the last point of a creek that runs into a bigger stream: down to that stream's water, by a riffle or, from higher up, a fall */
-      let join = null; if (q === n - 1 && !(fl & 4) && Math.abs(x) < HALF - 4 && Math.abs(z) < HALF - 4){ const w = World.wetAt(p[o], p[o + 1]), d = bed - w[5];
-        if (w[0] > 0.3 && !w[3] && d > 0.3 && w[6] > p[o + 3]*1.05){ if (d < 2.2) y = w[5] + LIFT + 0.04; else join = { half: w[6]/2, lvl: w[5] + LIFT, dry: !!w[9] }; } }
-      let px = x, pz = z; if (join){ const back = Math.max(0, Math.min(join.half - 2.2, Math.hypot(p[o] - p[o - 5], p[o + 1] - p[o - 4]) - 1.5)); px = x - tx*back; pz = z - tz*back; }      // (it stops two feet out over the bigger stream's bank, not in the middle of it: the bank's steps stay behind the falling water)
-      const b = ring(px, y, pz, -tz, tx, hw, along, slope, thr, join ? 0 : bw); if (b < 0) break;
-      if (a >= 0) span(a, b); else capUp(b);
-      a = b;
-      if (join){ fall(px + tx*0.3, pz + tz*0.3, tx, tz, y + 0.1, join.lvl, p[o + 3], !!(fl & 2) || join.dry, thr, true); capDown(a); a = -1; }
-      if (fallDn){ const x1 = p[o + 5] - bx, z1 = p[o + 6] - bz, L = Math.hypot(x1 - x, z1 - z) || 1, dx = (x1 - x)/L, dz = (z1 - z)/L, mx = (x + x1)/2, mz = (z + z1)/2, foot = p[o + 7], ft = Math.floor(foot + 1e-6);
-        let at = 0; if (Math.abs(mx) < HALF - 6 && Math.abs(mz) < HALF - 6) for (let k = -3; k <= 3; k += 0.25) if (stepAt(mx + dx*k, mz + dz*k) <= ft){ at = k; break; }      // where the land really steps down along the middle (the ground is in 2 ft cells)
-        const yTop = bed + LIFT, yFoot = foot + LIFT, lipAt = at + 3.4, hw1 = p[o + 8]/2 + EDGE;                                       // the lip stands 3.4 ft out from the land's step: room for the rock behind the falling water
-        const b1 = ring(mx + dx*lipAt, yTop, mz + dz*lipAt, -dz, dx, hw, along + L/2 + lipAt, 0, thr, 0); if (b1 < 0) break; span(a, b1); capDown(b1);      // (thin at the lip, and no bank: water shooting out)
-        fall(mx + dx*(lipAt + 0.3), mz + dz*(lipAt + 0.3), dx, dz, yTop + 0.1, yFoot, p[o + 3], !!(fl & 2), thr, false);                                   // the sheet hangs just in front of the lip, and its curl covers the ribbon's end
-        a = ring(mx + dx*(at - 1.5), yFoot, mz + dz*(at - 1.5), -dz, dx, hw1, along + L/2, 0, thr, 0); if (a < 0) break; capUp(a); }                         // and the pool begins back under the rock, behind the fall
-      if (q === n - 1 && a >= 0) capDown(a); } }
-  g.setDrawRange(0, ix); for (const k of ['position', 'normal', 'aFlow', 'aRun']){ const at = g.attributes[k]; at.updateRange.offset = 0; at.updateRange.count = v*at.itemSize; at.needsUpdate = true; } g.index.updateRange.offset = 0; g.index.updateRange.count = ix; g.index.needsUpdate = true;
+  const span = (a, b) => { IA[ix++] = a; IA[ix++] = a + 1; IA[ix++] = b + 1; IA[ix++] = a; IA[ix++] = b + 1; IA[ix++] = b; };            // the water between two cross-sections
+  const streams = World.streamsNear(bx, bz, HALF + 10), heads = [], tails = [];
+  for (const c of streams){ const p = c.pts, n = p.length/5; heads.push(p[0], p[1]); tails.push(p[(n - 1)*5], p[(n - 1)*5 + 1]); }
+  const meets = (L, x, z, skip) => { for (let i = 0; i < L.length; i += 2) if (i !== skip && Math.abs(L[i] - x) < 5 && Math.abs(L[i + 1] - z) < 5) return true; return false; };      // does another stream begin (or end) right here? Then this is one stream kept in two pieces, not a spring or a sink
+  const speed = sl => 2.6 + 3.0*smooth(0.05, 0.3, sl);            // feet a second, by how steeply it falls (the shader's white water starts and ends at the same slopes)
+  let si = -1;
+  for (const c of streams){ si++; const p = c.pts, n = p.length/5; if (n < 2) continue;
+    const contHead = meets(tails, p[0], p[1], si*2), contTail = meets(heads, p[(n - 1)*5], p[(n - 1)*5 + 1], si*2);
+    /* how steeply it falls at each of its points, by the stretches either side that are not sheer falls */
+    const sl = new Float32Array(n), cum = new Float32Array(n); for (let q = 0; q < n; q++){ const o = q*5; if (q) cum[q] = cum[q - 1] + Math.hypot(p[o] - p[o - 5], p[o + 1] - p[o - 4]);
+      let drop = 0, run = 0; if (q > 0 && !(p[o - 1] & 1)){ drop += p[o - 3] - p[o + 2]; run += Math.hypot(p[o] - p[o - 5], p[o + 1] - p[o - 4]); } if (q + 1 < n && !(p[o + 4] & 1)){ drop += p[o + 2] - p[o + 7]; run += Math.hypot(p[o + 5] - p[o], p[o + 6] - p[o + 1]); }
+      sl[q] = run > 0 ? Math.max(0, drop/run) : 0; }
+    const total = cum[n - 1];
+    /* walk it a foot at a time: where it is, the land as it is drawn under it, and so where its water lies */
+    const S = [];
+    for (let q = 0; q < n; q++){ const o = q*5, last = q === n - 1, L = last ? 0 : cum[q + 1] - cum[q], m = last ? 1 : Math.max(1, Math.round(L/DS));
+      for (let k = 0; k < m; k++){ const t = k/m, x = (last ? p[o] : p[o] + (p[o + 5] - p[o])*t) - bx, z = (last ? p[o + 1] : p[o + 1] + (p[o + 6] - p[o + 1])*t) - bz, fl = p[o + 4];
+        if (Math.abs(x) > lim || Math.abs(z) > lim){ S.push(null); continue; }
+        const qa = Math.max(0, q - 1), qb = Math.min(n - 1, q + 1); let tx = last || k ? (last ? p[o] - p[o - 5] : p[o + 5] - p[o]) : p[qb*5] - p[qa*5], tz = last || k ? (last ? p[o + 1] - p[o - 4] : p[o + 6] - p[o + 1]) : p[qb*5 + 1] - p[qa*5 + 1]; const tl = Math.hypot(tx, tz) || 1; tx /= tl; tz /= tl;
+        const sheer = !last && (fl & 1), bed = last ? p[o + 2] : sheer ? (t < 0.5 ? p[o + 2] : p[o + 7]) : p[o + 2] + (p[o + 7] - p[o + 2])*t, w = last ? p[o + 3] : p[o + 3] + (p[o + 8] - p[o + 3])*t, tide = !!(fl & 4), k9 = tide ? 1 : smooth(4.5, 9, w);
+        const e = clamp(w*0.3, 0.6, 2), hs = Math.min(heightAt(x, z), Math.max(heightAt(x - tz*e, z + tx*e), heightAt(x + tz*e, z - tx*e))), gs = Math.max(0, Math.floor(hs + 1e-6));      // the land under its middle (or its cut, when the middle stands higher than both sides): hs as the map has it, gs as it is drawn, in 1 ft steps
+        const even = tide ? bed + LIFT : clamp(bed + LIFT, hs + 0.1, hs + 0.9), y = gs + 0.16 + (even - gs - 0.16)*k9;      // a small creek lies on the land as drawn, down in its cut; a wide stream keeps an even surface, held to the land's own even height (never under its floor, never standing in the air over land that has dropped away)
+        const s0 = last ? total : cum[q] + L*t, sp = { x, z, tx, tz, s: s0, y, g: gs, w, hw: w/2 + 0.35 + 0.65*k9, fl, tide, vert: !k, thr: tide ? 0 : (fl >> 3)/31, slope: last ? sl[q] : sl[q] + (sl[q + 1] - sl[q])*t, big: 0, lvl: 0 };
+        if (!tide && !contTail && s0 > total - 70){ const w4 = World.wetAt(x + bx, z + bz); if (w4[0] > 0.3 && !w4[3] && w4[6] > w*1.05){ sp.big = 1; sp.lvl = w4[5] + LIFT + 0.03; sp.bigDry = !!w4[9]; } }      // it has come into a bigger stream's water
+        S.push(sp); } }
+    /* lay its water: cross-sections where its line turns, every few feet, and each side of every step of the land; a fall where the land drops sheer */
+    let a = -1, yPrev = 1e9, tau = 0, sLast = -99, sTau = 0, first = true, skipTo = -1, tideS = -1; const m = S.length;
+    const tauTo = sp => { tau += Math.max(0, sp.s - sTau)/speed(sp.slope); sTau = sp.s; return tau; };
+    const emit = (sp, x, z, y, slope, seen) => { const b = ring(x, y, z, -sp.tz, sp.tx, sp.hw, sp.s, slope, sp.thr, tauTo(sp), seen); if (b < 0) return false; if (a >= 0) span(a, b); a = b; sLast = sp.s; return true; };
+    let full = false;
+    for (let i = 0; i < m && !full; i++){ const sp = S[i]; if (!sp){ a = -1; yPrev = 1e9; first = false; continue; }
+      const nxt = i + 1 < m ? S[i + 1] : null, isEnd = i === m - 1;
+      if (sp.big){            // into a bigger stream: down to its water, and gone within a few feet
+        if (a >= 0){ if (!emit(sp, sp.x, sp.z, Math.min(yPrev, sp.lvl), sp.slope, 0)) full = true; }
+        break; }
+      let y = Math.min(sp.y, yPrev), sn = 1;
+      if (sp.tide){            // past the tide line a river is gone into the sea within a few of its own widths, whatever the tide (at low water its last reach lay on the sea as a pale slab with a ruled end)
+        if (tideS === -1) tideS = i === 0 || !S[i - 1] ? -1e9 : sp.s; sn = 1 - smooth(0, clamp(0.7*sp.w, 16, 45), sp.s - tideS);
+        if (sn <= 0.01){ if (a >= 0 && !emit(sp, sp.x, sp.z, y, sp.slope, 0)) full = true; break; } }
+      const begins = a < 0;
+      if (begins){ const seen = first && !contHead ? 0 : sn; if (!emit(sp, sp.x, sp.z, y, sp.slope, seen)){ full = true; break; } }      // (a spring: it thins out to nothing at its very head)
+      else { const stepDn = yPrev - y;
+        if (sp.s < skipTo){ }            // (inside the face of a drop just laid)
+        else if (stepDn >= 0.4 && !sp.tide){            // a step of the land: its edge found to an inch or two, a cross-section just above it and one below (a short white drop; a longer chute where it drops further)
+          const pv = S[i - 1]; let lo = 0, hi = 1; if (pv){ for (let b = 0; b < 6; b++){ const md = (lo + hi)/2; if (stepAt(pv.x + (sp.x - pv.x)*md, pv.z + (sp.z - pv.z)*md) < pv.g - 0.5) hi = md; else lo = md; }
+            const ex = pv.x + (sp.x - pv.x)*hi, ez = pv.z + (sp.z - pv.z)*hi, face = stepDn > 1.4 ? clamp(0.5 + 0.9*(stepDn - 1), 0.5, 6) : 0.5, wh = Math.max(sp.slope, stepDn > 1.4 ? 0.5 : 0.19), more = nxt && !nxt.big && y - Math.min(nxt.y, y) >= 0.4;
+            if (!emit(pv, ex - sp.tx*0.12, ez - sp.tz*0.12, yPrev, wh, 1) || !emit(sp, ex + sp.tx*face, ez + sp.tz*face, y, wh, 1) || (!more && !emit(sp, ex + sp.tx*(face + 0.45), ez + sp.tz*(face + 0.45), y, sp.slope, 1))){ full = true; break; }
+            if (face > 0.6) skipTo = pv.s + hi + face + 0.5; } }
+        else if (sp.vert || isEnd || !nxt || sp.s - sLast >= 6 || (first && !contHead && sp.s < 4.5 && sp.s - sLast >= 3) || (i + 3 < m && S[i + 3] && S[i + 3].big && !(S[i + 2] && S[i + 2].big))){ if (!emit(sp, sp.x, sp.z, y, sp.slope, sn)){ full = true; break; } } }
+      yPrev = y;
+      /* a fall: the water's level drops a foot and a half or more to the next foot of its way, and goes on dropping steeply. Found from the land (and, for a wide stream, its bed). */
+      if (nxt && !sp.tide && y - (nxt.big ? nxt.lvl : nxt.y) >= 1.5){ let j = i + 1; while (j + 1 < m && S[j + 1] && !S[j].big && (S[j].big ? S[j].lvl : S[j].y) - (S[j + 1].big ? S[j + 1].lvl : S[j + 1].y) >= 0.9) j++;
+        const ft = S[j], yFoot = Math.min(y, ft.big ? ft.lvl : ft.y), H = y - yFoot, X = ft.s - nxt.s + 1;
+        if (H >= 2 && X <= 2.4 + 0.3*H && (sp.w <= 12 || H >= 0.22*sp.w)){            // (a wide stream over a low ledge is a chute, laid by the step rule above)
+          if (sp.s !== sLast && !emit(sp, sp.x, sp.z, y, sp.slope, 1)){ full = true; break; }
+          let lo = 0, hi = 1; for (let b = 0; b < 6; b++){ const md = (lo + hi)/2; if (stepAt(sp.x + (nxt.x - sp.x)*md, sp.z + (nxt.z - sp.z)*md) < sp.g - 0.5) hi = md; else lo = md; }
+          const ex = sp.x + (nxt.x - sp.x)*hi, ez = sp.z + (nxt.z - sp.z)*hi; let dx = ft.x - sp.x, dz = ft.z - sp.z; const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
+          const vLip = X - 1 + 1.3 + Math.min(1.9, 0.06*H), lx = ex + dx*vLip, lz = ez + dz*vLip;                                   // the lip stands clear of the cliff's foot: room for the rock behind the falling water
+          const b1 = ring(lx, y, lz, -dz, dx, sp.hw, sp.s + vLip, 0, sp.thr, tau + vLip/speed(0.3), 1); if (b1 < 0){ full = true; break; } span(a, b1);      // (level out to the lip: water shooting out over the rock)
+          got.push({ x: lx + dx*0.3, z: lz + dz*0.3, dx, dz, yFoot, hh: H + 0.25, wide: sp.hw*2 - 0.4, dry: !!(sp.fl & 2) || (ft.big && ft.bigDry), thr: sp.thr, join: !!ft.big, ex, ez, X, vLip, yTop: y });
+          a = -1; tau += 0.3 + Math.sqrt(2*H/32.2); sTau = ft.s;                                             // (it takes the time of the fall)
+          if (ft.big){ const b2 = ring(lx - dx*0.6, yFoot, lz - dz*0.6, -dz, dx, ft.hw, ft.s, 0, sp.thr, tau, 1), b3 = b2 < 0 ? -1 : ring(lx + dx*2.6, yFoot, lz + dz*2.6, -dz, dx, ft.hw, ft.s + 3, 0, sp.thr, tau + 1, 0); if (b3 < 0){ full = true; break; } span(b2, b3); break; }      // into a bigger stream: a few feet of its own water under the fall, then gone
+          a = ring(lx - dx*1.0, yFoot, lz - dz*1.0, -dz, dx, ft.hw, ft.s, 0, sp.thr, tau, 1); if (a < 0){ full = true; break; } sLast = ft.s;      // the pool begins back under the rock, behind the fall
+          yPrev = yFoot; i = j; first = false; continue; } }
+      if (isEnd && !sp.tide && !contTail && a >= 0){ const q = a*2; XA[q + 1] = XA[q + 3] = 0; }      // a sink: it thins out to nothing where it ends on the land
+      first = first && sp.s < 4.5; } }
+  g.setDrawRange(0, ix); for (const k of ['position', 'normal', 'aFlow', 'aRun', 'aFx']){ const at = g.attributes[k]; at.updateRange.offset = 0; at.updateRange.count = v*at.itemSize; at.needsUpdate = true; } g.index.updateRange.offset = 0; g.index.updateRange.count = ix; g.index.needsUpdate = true;
   W.streamV = v;
-  /* the rock of every fall, dry or running: behind the water, round the pool */
-  { let n = 0; for (const f of got){ if (n >= FALL_MAX) break; const yaw = Math.atan2(f.dx, f.dz), w = f.wide + 2*EDGE + 0.3, y0 = f.yFoot - 1.3, bkx = f.x - f.dx*1.2, bkz = f.z - f.dz*1.2;
-      _M.compose(_P.set(bkx, y0, bkz), _Q.setFromEuler(_E.set(0, yaw, 0)), _S.set(w + 1.4, f.yFoot + f.hh - 0.5 - y0, f.join ? 2.4 : Math.max(4, Math.min(10, w*0.62)))); rock.setMatrixAt(n, _M); rock.userData.ink.setMatrixAt(n, _M);
-      rock.setColorAt(n, _C.set(World.rockAt(bkx + bx, bkz + bz).col).lerp(_C2s.set(0xcfc8b6), 0.45)); n++; }      // the rock of the place, paler: clean broken rock, as the big boulders are
-    rock.count = rock.userData.ink.count = n; rock.instanceMatrix.needsUpdate = rock.userData.ink.instanceMatrix.needsUpdate = true; if (rock.instanceColor) rock.instanceColor.needsUpdate = true; }
+  /* the rock of every fall, dry or running: boulders behind the water and down both sides */
+  R.n = 0; for (const f of got) fallRockPile(R, f, bx, bz);
+  R.m.count = R.o.count = R.n; R.m.instanceMatrix.needsUpdate = R.o.instanceMatrix.needsUpdate = true; if (R.m.instanceColor) R.m.instanceColor.needsUpdate = true;
   /* the falls: those that run soonest first (each has the wetness at which its reach starts to run; streamStep shows as many as run now) */
   got.sort((p, q) => p.thr - q.thr); let n = 0; W.falls = [];
-  for (const f of got){ if (n >= FALL_MAX) break; const yaw = Math.atan2(f.dx, f.dz), w = f.wide + 2*EDGE + 0.3;
+  for (const f of got){ if (n >= FALL_MAX) break; const yaw = Math.atan2(f.dx, f.dz), w = f.wide + 0.3;
     _M.compose(_P.set(f.x, f.yFoot - 0.1 + f.hh/2, f.z), _Q.setFromEuler(_E.set(0, yaw, 0)), _S.set(w, f.hh, 1.7)); fm.setMatrixAt(n, _M);
-    _M.compose(_P.set(f.x + f.dx*1.1, f.yFoot + 0.06, f.z + f.dz*1.1), _Q, _S.set(Math.min(w*0.8 + 1.6, w*0.5 + 4), 1, Math.min(w*0.65 + 1.9, 7))); foam.setMatrixAt(n, _M); n++;
-    W.falls.push({ x: f.x + f.dx*1.1, z: f.z + f.dz*1.1, y: f.yFoot, w: f.wide, drop: +(f.hh - 0.15).toFixed(1), last: 0, dry: f.dry, thr: f.thr }); }
+    _M.compose(_P.set(f.x + f.dx*1.1, f.yFoot + 0.06, f.z + f.dz*1.1), _Q, _S.set(Math.min(w*0.62 + 1.2, w*0.5 + 3), 1, Math.min(w*0.4 + 1.5, 4.6))); foam.setMatrixAt(n, _M); n++;
+    W.falls.push({ x: f.x + f.dx*1.1, z: f.z + f.dz*1.1, y: f.yFoot, w: f.wide, drop: +(f.hh - 0.25).toFixed(1), last: 0, dry: f.dry, thr: f.thr }); }
   W.fallWet = W.falls.filter(f => !f.dry).length; fm.count = foam.count = fallsRunning(); fm.instanceMatrix.needsUpdate = foam.instanceMatrix.needsUpdate = true;
 }
 function fillTreeTex(){
@@ -3962,9 +4001,10 @@ terrainMat.onBeforeCompile = sh => {
            float thr = run*clamp((1.0 - fn)/0.75, 0.0, 1.0), flowK = clamp((uRun.x - thr)/uRun.y + 1.0, 0.0, 1.0), dryK = run*smoothstep(0.0, 0.06, thr);      // (v119) each spot runs once the land is as wet as its own threshold (kept in the length of its flow), coming on over a band: so the water creeps up a gully as it rains and draws back down it after
            fl = fn > 0.2 ? fl/fn : vec2(1.0, 0.0);
            float edge = ck.r + (g3.g - 0.5)*0.07;                                              // the water's edge is a little ragged
-           float damp = smoothstep(0.06, 0.55, edge)*(1.0 - rk);
+           float seaK = smoothstep(uTide - 0.15, uTide + 0.45, y);                             // (v130) 0 under the tide: the sea has that ground, not the stream
+           float damp = smoothstep(0.06, 0.55, edge)*(1.0 - rk)*seaK;
            c = mix(c, c*vec3(0.7, 0.8, 0.62), damp*0.6*mix(0.4, 1.0, flowK));                                       // the bank: darker and greener
-           { float bar = run*smoothstep(0.34, 0.66, edge)*smoothstep(0.5, 0.62, g2.r*0.55 + g3.b*0.45)*(1.0 - rk)*top;      // (v129) gravel and pebbles lying along the water here and there: bars, not a band
+           { float bar = run*smoothstep(0.34, 0.66, edge)*smoothstep(0.5, 0.62, g2.r*0.55 + g3.b*0.45)*(1.0 - rk)*top*seaK;      // (v129) gravel and pebbles lying along the water here and there: bars, not a band
              c = mix(c, mix(vec3(0.6, 0.57, 0.48), vec3(0.43, 0.43, 0.39), g4.r)*(0.88 + 0.24*step(0.5, g1.r)), bar*0.9); }
            float wtr = smoothstep(0.7, 0.78, edge);
            vec3 stillC = mix(vec3(0.17, 0.34, 0.37), vec3(0.3, 0.5, 0.5), smoothstep(0.42, 0.7, g2.g)*0.55);
@@ -3975,8 +4015,8 @@ terrainMat.onBeforeCompile = sh => {
            vec3 bedC = mix(vec3(0.47, 0.45, 0.4), vec3(0.76, 0.73, 0.64), smoothstep(0.3, 0.7, g3.r))*(0.84 + 0.3*g4.r);      // a dry reach: a trench of gravel and cobbles the water has cut
            bedC = mix(bedC, vec3(0.33, 0.32, 0.3), smoothstep(0.68, 0.84, g1.b)*0.55)*mix(0.7, 1.0, top);
            float thread = smoothstep(mix(0.93, 0.7, flowK), mix(0.985, 0.78, flowK), edge)*smoothstep(0.0, 0.22, flowK);      // the water itself: a thread down the middle of the bed when it has just begun to run, the whole bed when it runs full
-           c = mix(c, bedC, wtr*dryK*(1.0 - thread));
-           c = mix(c, wc, thread);
+           c = mix(c, bedC, wtr*dryK*(1.0 - thread)*seaK);
+           c = mix(c, wc, thread*seaK);
          }
        }
        diffuseColor.rgb = c; }`).replace('#include <fog_fragment>', `
@@ -4648,7 +4688,7 @@ function newWorld(seedStr, hexId, at, home){
   W.boatSpot = W.sw ? (W.boatG ? { x: W.boatG.x - W.base.x, z: W.boatG.z - W.base.z } : (findBoatSpotSW() || findBoatFar())) : findBoatSpot();
   if (W.sw && !W.boatG && W.boatSpot) W.boatG = { x: W.boatSpot.x + W.base.x, z: W.boatSpot.z + W.base.z };
   for (let cz=0;cz<NC;cz++) for (let cx=0;cx<NC;cx++){ const ch = { cx, cz }; buildTerrain(ch); W.chunks.push(ch); }
-  if (W.sw){ farAt = null; buildBigRocks(); buildSkirt(); buildFarTrees(); } else { if (farTrees) farTrees.geometry.instanceCount = 0; if (bigM) for (const b of bigM) b.m.count = b.o.count = 0; if (lifeM) for (const k in lifeM) lifeM[k].m.count = lifeM[k].o.count = 0; if (fallM) fallM.count = fallM.userData.foam.count = 0; if (streamM) streamM.geometry.setDrawRange(0, 0); if (alcoveM) alcoveM.count = alcoveM.userData.ink.count = 0; }
+  if (W.sw){ farAt = null; buildBigRocks(); buildSkirt(); buildFarTrees(); } else { if (farTrees) farTrees.geometry.instanceCount = 0; if (bigM) for (const b of bigM) b.m.count = b.o.count = 0; if (lifeM) for (const k in lifeM) lifeM[k].m.count = lifeM[k].o.count = 0; if (fallM) fallM.count = fallM.userData.foam.count = 0; if (streamM) streamM.geometry.setDrawRange(0, 0); if (fallRockM) fallRockM.m.count = fallRockM.o.count = 0; }
   for (const ch of W.chunks) plantTrees(ch);
   if (W.sw) liveTrees();
   fillTreeTex();

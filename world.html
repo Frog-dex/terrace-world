@@ -5209,7 +5209,7 @@ function saveGame(){
       piles: W.piles.map(p => ({ x:p.x, z:p.z, items:p.items })), rocks: sw ? [] : rk,
       pack: W.pack, chest: W.chest, hands: W.hands || null, wear: W.wear, wearOf: W.wearOf || 'C1', wearBy: W.wearBy || {}, gearGot: W.gearGot || {}, strap: W.strapItem || null, modCards: W.modCards || null, holderClip: 1, carry: CARRY, str: { lv:STR.lv, xp:STR.xp }, stoneV2: true, relicV3: true,
       dirt: W.dirt, sand: W.sand, gotWatch: W.gotWatch || 0, rock: W.rock || 0, clumps: (W.clumps || []).map(c => [+c.x.toFixed(2), +c.z.toFixed(2)]), found: sw ? [] : [...W.found], foundCount: W.foundCount, rep: W.rep || {}, party: W.party || [], repScopes: (typeof SpiritsRep !== "undefined" ? SpiritsRep.serialize() : null),
-      cards: cardsOwned, hp: player.hp, hero: { x: hero.x, z: hero.z }, boat: W.boat ? { x: W.boat.x, z: W.boat.z, heading: W.boat.heading } : null,
+      cards: cardsOwned, hp: player.hp, hpMax: player.max, hero: { x: hero.x, z: hero.z }, boat: W.boat ? { x: W.boat.x, z: W.boat.z, heading: W.boat.heading } : null,
       clock: { tod: clock.tod, days: clock.days } };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data)); localStorage.setItem(HEX_KEY, String(W.hex || 0)); if (sw) W.stamp = data.at;
     const n = document.getElementById('saveNote'); if (n) n.textContent = 'Saved ' + new Date().toLocaleTimeString([], { hour:'numeric', minute:'2-digit' }) + '. Your world keeps itself in this browser.';
@@ -5258,7 +5258,7 @@ function loadGame(){
     }
     W.pack = d.pack; W.chest = d.chest; W.hands = d.hands || null; W.wear = d.wear; W.wearOf = d.wearOf || 'C1'; W.wearBy = d.wearBy || {}; W.gearGot = d.gearGot || {}; W.strapItem = d.strap; W.modCards = d.modCards || null; if (!W.modCards && !d.holderClip){ const hi = W.pack.items.findIndex(o => o.id === 'holder'); if (hi >= 0){ W.modCards = W.pack.items.splice(hi, 1)[0]; W.wear.mCards = 'holder'; } } CARRY = d.carry || 40; if (d.str){ STR.lv = d.str.lv; STR.xp = d.str.xp; } if (!d.stoneV2) repackStones();
     W.dirt = d.dirt || 0; W.sand = d.sand || 0; W.gotWatch = d.gotWatch || 0; W.rock = d.rock || 0; (W.clumps || []).forEach(c => scene.remove(c.g)); W.clumps = []; (d.clumps || []).forEach(([cx, cz]) => { const c = spawnClump(cx, 0, cz, false); c.y = groundY(cx, cz) + 0.3; c.rest = true; c.g.position.set(cx, c.y, cz); }); W.found = new Set(d.found); if (W.sw) syncFound(); W.foundCount = d.foundCount || 0; W.rep = d.rep; W.party = d.party; if (d.repScopes && typeof SpiritsRep !== "undefined") SpiritsRep.restore(d.repScopes);
-    Object.assign(cardsOwned, d.cards); player.hp = d.hp;
+    Object.assign(cardsOwned, d.cards); if (d.hpMax > 0) player.max = d.hpMax; player.hp = typeof d.hp === 'number' ? Math.min(d.hp, player.max) : player.max;
     hero.x = d.hero.x; hero.z = d.hero.z; hero.y = stepAt(hero.x, hero.z); hero.boating = false; cam.tx = hero.x; cam.tz = hero.z; cam.ty = hero.y;
     if (d.boat && W.boat){ W.boat.x = d.boat.x; W.boat.z = d.boat.z; W.boat.heading = d.boat.heading; }
     clock.tod = d.clock.tod; clock.days = d.clock.days;
@@ -9913,7 +9913,7 @@ function applyHeroStats(code){
   const C = CHARS[code]; if (!C) return;
   const ratio = player.max ? Math.max(0, player.hp)/player.max : 1, mratio = player.magicMax ? player.magic/player.magicMax : 1;
   heroCode = code; window.__heroCode = code; window.__heroName = C.name; window.__heroSpeed = C.speed; window.__heroCarry = C.carry;
-  player.max = C.hp; player.hp = Math.max(1, Math.round(ratio*C.hp)); player.magicMax = C.mg; player.magic = Math.min(C.mg, Math.round(mratio*C.mg));
+  player.max = C.hp; player.hp = Math.max(1, Math.round(ratio*C.hp)); if (player.hp > player.max) player.hp = player.max; player.magicMax = C.mg; player.magic = Math.min(C.mg, Math.round(mratio*C.mg));
   MOVES.splice(0, MOVES.length, ...C.moves); ME_TYPE = C.el;
   try { setMode(C.mode); } catch(e){}
   for (const w of walkers){ w.mesh.scale.setScalar(C.size); w.shadow.scale.setScalar(C.size); }
@@ -11338,10 +11338,12 @@ try {
         + ' vec3 hot = mix(col*1.6, vec3(1.0), 0.65); vec3 c = hot*clamp(bolts, 0.0, 1.4) + col*1.4*haze + mix(col*1.5, vec3(1.0), 0.8)*core + hot*tips*0.9;'
         + ' gl_FragColor = vec4(c*pw, 1.0); }' }));
     plasma.renderOrder = 2; plasma.position.z = 1; g.add(plasma);
+    plasma.material.extensions = { derivatives: true }; plasma.material.fragmentShader = plasma.material.fragmentShader.replace('float w = mix(0.07, 0.012, r);', 'float w = max(mix(0.085, 0.032, r), 1.5*fwidth(r)/max(r, 0.06));').replace('hot*clamp(bolts, 0.0, 1.4)', 'hot*clamp(bolts*1.3, 0.0, 1.7)');      // (Lane B, for Blu: a bolt is never thinner than a pixel and a half on the screen)
     // at night the liquid's energy shows: a soft halo of its own colour round the globe
     const halo = new THREE.Mesh(new THREE.SphereGeometry(R*1.55, 32, 20), new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { col: { value: new THREE.Color(kind === 'h' ? 0xff5a4a : 0x5aa0ff) }, k: { value: 0 } },
       vertexShader: 'varying vec3 vN; varying vec3 vV; void main(){ vec4 mv = modelViewMatrix*vec4(position,1.0); vN = normalize(normalMatrix*normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix*mv; }',
       fragmentShader: 'uniform vec3 col; uniform float k; varying vec3 vN; varying vec3 vV; void main(){ float d = abs(dot(normalize(vN), vV)); gl_FragColor = vec4(col, pow(d, 3.0)*0.5*k); }' })); halo.renderOrder = 1; g.add(halo);
+    halo.material.fragmentShader = 'uniform vec3 col; uniform float k; varying vec3 vN; varying vec3 vV; void main(){ float d = abs(dot(normalize(vN), vV)); float ring = (1.0 - smoothstep(0.69, 0.79, d))*pow(clamp(d/0.76, 0.0, 1.0), 5.0); gl_FragColor = vec4(col, ring*0.5*k); }';      // (Lane B, for Blu: the glow is round the glass, not over the Tesla ball inside it. The flask's edge is where d is 0.76 on this sphere)
 
     // bubbles rising through the liquid
     const bub = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .7 }), 7); g.add(bub);

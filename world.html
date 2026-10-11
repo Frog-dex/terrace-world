@@ -543,6 +543,30 @@ body.twhud .bpanel .bmoves{border-top:2px solid #d9cdb0!important}
   <div class="bt"><button id="wdbgOre" aria-pressed="false">Ore view</button><button id="wdbgDepth">4 ft deep</button><button id="wdbgPit">Cut a test pit</button></div>
   <div class="bt"><button id="wdbgCreek">Go to a creek</button><button id="wdbgPond">Go to a pond</button><button id="wdbgFall">Go to a waterfall</button></div>
   <div class="bt"><button id="wdbgHill">Go to high ground</button><button id="wdbgRiver">Go to a river</button></div>
+<!-- WATER-DESK-BEGIN (tools/patches/wire_water_desk.py) -->
+<style id="twWaterDesk">
+#wdDesk h4{margin:9px 0 4px}
+#wdMap{display:block;width:100%;height:auto;border-radius:7px;border:1.5px solid #6c6897;cursor:crosshair;margin:0 0 5px}
+#wdDesk input[type=text]{flex:1 1 120px;min-width:0;width:auto;font:500 11.5px/1.2 ui-monospace,Menlo,monospace;color:#fbf8f0;background:#15112e;border:1.5px solid #6c6897;border-radius:6px;padding:6px 7px}
+#wdDesk input[type=text]::placeholder{color:#8f97b8}
+#wdFlags{display:block;width:100%;box-sizing:border-box;font:500 10px/1.35 ui-monospace,Menlo,monospace;color:#e9eef7;background:#15112e;border:1.5px solid #6c6897;border-radius:6px;padding:5px 6px;margin:0 0 5px;resize:vertical;white-space:pre;overflow:auto}
+#wdNow{margin:0 0 6px;color:#a6b4d4;min-height:2.8em}
+#wdDesk kbd{font:inherit;opacity:.7;margin-left:5px}
+#perf .at{display:block;text-align:right;color:#f2d27a}
+body.twhud .dbgBtn{bottom:calc(var(--twBotH,132px) + 46px + env(safe-area-inset-bottom,0px))}
+</style>
+<div id="wdDesk">
+  <h4>Water desk</h4>
+  <canvas id="wdMap" width="350" height="236" aria-label="The streams round her. Click one to choose it."></canvas>
+  <div class="bt"><button id="wdPrev" title="The place before ( [ )">Prev</button><button id="wdNext" title="The next spring, join, fall or mouth ( ] )">Next place</button><button id="wdSide" aria-pressed="false">Side view</button></div>
+  <div class="bt"><button id="wdFly" title="Down the chosen stream, or the nearest one, to the sea">Fly</button><button id="wdSlow">Slower</button><button id="wdFast">Faster</button></div>
+  <p id="wdNow"></p>
+  <div class="bt"><input id="wdNote" type="text" maxlength="200" placeholder="what is wrong here" aria-label="What is wrong here"><button id="wdFlag">Flag this spot<kbd>X</kbd></button></div>
+  <textarea id="wdFlags" rows="3" readonly wrap="off" aria-label="Your flags, as lines to paste to Claude"></textarea>
+  <div class="bt"><button id="wdCopy">Copy 0 flags</button><button id="wdClear">Clear flags</button></div>
+  <div class="bt"><input id="wdTo" type="text" placeholder="a flag line, or  x, z" aria-label="A place to go to"><button id="wdGo">Go there</button></div>
+</div>
+<!-- WATER-DESK-END -->
   <div id="wdbgBody"></div>
 </aside>
 <div class="readout card" id="readout" aria-live="polite">
@@ -8073,7 +8097,8 @@ function perfTick(now, workMs){
   const c = fps < 30 ? 'bad' : fps < 50 ? 'ok' : '';
   (PERF.el || (PERF.el = document.getElementById('perf'))).innerHTML =
     `<span class="${c}">FPS ${Math.round(fps)}</span> · ${(PERF.work/PERF.n).toFixed(1)} ms (worst ${PERF.worst.toFixed(0)}) · ${i.render.calls} draws · ${(i.render.triangles/1000).toFixed(0)}k tris · ${i.memory.geometries} geo · ${i.memory.textures} tex` +
-    (mem ? ` · RAM ${(mem.usedJSHeapSize/1048576).toFixed(0)} MB` : '') + ` · res ×${GFX.pr.toFixed(2)}`;
+    (mem ? ` · RAM ${(mem.usedJSHeapSize/1048576).toFixed(0)} MB` : '') + ` · res ×${GFX.pr.toFixed(2)}`
+    + (typeof W !== 'undefined' && W && W.sw && W.base ? `<span class="at">${W.hex} @ ${Math.round(hero.x + W.base.x)}, ${Math.round(hero.z + W.base.z)} · facing ${DBG_DIR[(Math.round(Math.atan2(-Math.sin(cam.yaw), Math.cos(cam.yaw))/(Math.PI/4)) + 8) % 8]}</span>` : '');      // (water desk) where she is, so any screenshot says where it was taken
   PERF.n = 0; PERF.at = now; PERF.work = 0; PERF.worst = 0;
 }
 /* ================= world debug (Lane A) =================
@@ -8199,6 +8224,7 @@ function dbgBody(){
 }
 function dbgFrame(now){
   if (!DBG.on || !W || W.loading || battle.on || inside.on) return;
+  wdFrame(now);            // the water desk (src/world/water-desk.js)
   const o = DBG.oreAt; if (DBG.ore && (!o || o[2] !== W.base.x || o[3] !== W.base.z || (hero.x - o[0])**2 + (hero.z - o[1])**2 > 36)) dbgOre();
   if (now < DBG.due) return; DBG.due = now + 330;
   document.getElementById('wdbgBody').innerHTML = dbgBody();
@@ -8230,6 +8256,149 @@ function dbgRiver(){              // to the nearest river (a planner river line,
 document.getElementById('wdbgHill').onclick = () => toast(dbgHill());
 document.getElementById('wdbgRiver').onclick = () => toast(dbgRiver());
 dbgEl.addEventListener('click', e => { if (e.target.tagName === 'BUTTON') e.target.blur(); });            // (so the keys go back to the game)
+/* WATER-DESK-BEGIN (src/world/water-desk.js; put into the game by tools/patches/wire_water_desk.py: edit that file, then run the patch again)
+   THE WATER DESK (Lane A, 2026-10-11). Blu: "let's say we know all the data of all the rivers, like a graph tool, and then you could build a
+   systematic screenshot tool. It's like a dev tool ... a flyover ... stuff that gets in the way of the water system or where it's dry. And then
+   you could manually flag [an] issue based off a coordinate ... we got to manually fix it every time and then update the next generation."
+   In the World debug panel (press 0), on the Toga world only:
+     THE MAP    every stream within 1,100 ft of her as a line (its width by its size; tan where it lies dry in dry weather), with its springs,
+                joins, falls, mouths and dead ends as dots, her own flags as red pins, and her as a yellow arrow. Click a stream to choose it.
+     THE ROUND  Next and Prev (or ] and [) take her to each of those places in turn, seen from downstream; "Side view" from across.
+     THE FLIGHT "Fly" carries her down the chosen stream from the chosen point (or the nearest stream from where she is), into whatever it joins,
+                to the sea. Slower, Faster, and Fly again to stop.
+     A FLAG     "Flag this spot" (or X) writes down where she is, how the camera looks, how wet the land is and the time of day, with a note.
+                Flags are kept in this browser and shown as lines to copy and paste to Claude; "Go there" takes a pasted line (or "x, z").
+   Shut, it costs nothing. The headless tools use the same code through window.TWWATER (tools/water/desk.py). */
+const WD = { R: 1100, at: null, S: [], N: [], k: -1, side: false, sel: -1, selId: '', selQ: 0, fly: null, speed: 16, flags: [], due: 0, last: 0, say: '', arm: -1 };
+const WD_KEY = 'tw-water-flags', wd$ = id => document.getElementById(id);
+try { const f = JSON.parse(localStorage.getItem(WD_KEY) || '[]'); if (Array.isArray(f)) WD.flags = f; } catch(e){}
+const wdStream = s => `${s.river || (s.wide >= 14 ? 'A river' : s.wide >= 6 ? 'A stream' : 'A creek')} ${Math.round(s.wide)} ft wide, ${Math.round(s.len).toLocaleString()} ft long${s.dry > 0.5 ? ', dry in dry weather' : ''}, ${s.end === 'sea' ? 'to the sea' : s.end === 'join' ? 'into a bigger stream' : s.end === 'on' ? 'running on' : 'ending on the land'}`;
+const wdLabel = n => n.kind === 'fall' ? `fall ${n.drop} ft, ${Math.round(n.wide)} ft wide${n.dry ? ', a dry reach' : ''}` : n.kind === 'join' ? `join: a ${Math.round(n.wide)} ft creek into a ${Math.round(n.into)} ft stream` : n.kind === 'mouth' ? `mouth of a ${Math.round(n.wide)} ft stream`
+  : n.kind === 'spring' ? `spring of a ${Math.round(n.wide)} ft creek` : `a ${Math.round(n.wide)} ft creek ends on the land`;
+function wdGraph(cx, cz){            // the streams within WD.R of a spot (her, if none is given) and what joins what; then the places worth a look
+  const X = cx === undefined ? hero.x + W.base.x : cx, Z = cz === undefined ? hero.z + W.base.z : cz, S = [], N = [], H = Math.hypot;
+  for (const c of World.streamsNear(X, Z, WD.R)){ const p = c.pts, n = p.length/5; if (n < 2) continue; let len = 0, wide = 0, dry = 0, tide = -1;
+    for (let q = 0; q < n; q++){ const o = q*5; if (q) len += H(p[o] - p[o - 5], p[o + 1] - p[o - 4]); if (!(p[o + 4] & 4)) wide = Math.max(wide, p[o + 3]); if (p[o + 4] & 2) dry++; if (tide < 0 && (p[o + 4] & 4)) tide = q; }
+    S.push({ p, n, len, wide: wide || p[3], dry: dry/n, tide, river: typeof c.river === 'string' ? c.river : (c.river && c.river.name) || '', id: Math.round(p[0]) + ',' + Math.round(p[1]), next: -1, nextQ: 0, end: '' }); }
+  S.forEach((s, i) => { const o = (s.n - 1)*5, tx = s.p[o], tz = s.p[o + 1], tw = s.p[o + 3];
+    if (s.p[o + 4] & 4){ s.end = 'sea'; return; }
+    for (let j = 0; j < S.length; j++) if (j !== i && H(S[j].p[0] - tx, S[j].p[1] - tz) < 6){ s.next = j; s.nextQ = 0; s.end = 'on'; return; }      // the same stream, kept in two pieces
+    let b = -1, bq = 0, bd = 1e9; for (let j = 0; j < S.length; j++){ if (j === i) continue; const p = S[j].p; for (let q = 0; q < S[j].n; q++){ const d = H(p[q*5] - tx, p[q*5 + 1] - tz); if (d < bd && d < p[q*5 + 3]/2 + 6 && p[q*5 + 3] > tw*1.05){ bd = d; b = j; bq = q; } } }
+    if (b >= 0){ s.next = b; s.nextQ = bq; s.end = 'join'; } else s.end = 'end'; });
+  const dirAt = (s, q) => { const a = Math.max(0, q - 1), b = Math.min(s.n - 1, q + 1), dx = s.p[b*5] - s.p[a*5], dz = s.p[b*5 + 1] - s.p[a*5 + 1], l = H(dx, dz) || 1; return [dx/l, dz/l]; };
+  const put = (kind, s, i, q, more) => { const o = q*5, x = s.p[o], z = s.p[o + 1]; if (H(x - X, z - Z) > WD.R - 60) return; const d = dirAt(s, q); N.push(Object.assign({ kind, x, z, dx: d[0], dz: d[1], wide: s.p[o + 3], s: i, q }, more)); };
+  S.forEach((s, i) => { let fed = false; for (let j = 0; j < S.length && !fed; j++) fed = j !== i && S[j].next === i && S[j].end === 'on';
+    if (!fed && !(s.p[4] & 4)) put('spring', s, i, 0);
+    if (s.end === 'join') put('join', s, i, s.n - 1, { into: S[s.next].wide }); else if (s.end === 'end') put('end', s, i, s.n - 1);
+    if (s.tide >= 0) put('mouth', s, i, s.tide, { wide: s.wide }); });
+  for (const f of World.watersNear(X, Z, WD.R).falls) N.push({ kind: 'fall', x: f.x, z: f.z, dx: f.dx, dz: f.dz, wide: f.wideFt, drop: f.dropFt, dry: f.dry, s: -1, q: 0 });
+  for (const n of N) n.ft = H(n.x - X, n.z - Z); N.sort((a, b) => a.ft - b.ft);
+  WD.S = S; WD.N = N; WD.at = [X, Z]; WD.k = -1; WD.sel = WD.selId ? S.findIndex(s => s.id === WD.selId) : -1; wdDraw(); return N.length;
+}
+function wdGo(X, Z, yaw, dist, pitch, quick){            // take her (and the camera) to a spot of the world
+  const go = () => { hero.x = X - W.base.x; hero.z = Z - W.base.z; rebaseTo(X, Z, true); liveUpdate();
+    hero.x = X - W.base.x; hero.z = Z - W.base.z; hero.y = stepAt(hero.x, hero.z); hero.target = null; hero.pending = null; cam.tx = hero.x; cam.ty = hero.y + 3; cam.tz = hero.z;
+    if (yaw === yaw && yaw !== undefined && yaw !== null) cam.yaw = yaw; if (dist) cam.dist = cam.goalDist = dist; if (pitch) cam.pitch = cam.goalPitch = pitch; DBG.due = 0; DBG.oreAt = null; WD.due = 0; };
+  if (quick) go(); else fadeThen(go); }
+function wdShow(k, quick){            // to one of the places worth a look, seen from downstream (or from across)
+  if (!W.sw) return 'There is no map under this island.'; if (hero.boating) return 'Come ashore first.';
+  if (!WD.at) wdGraph(); const N = WD.N; if (!N.length) return 'No water within reach of here.';
+  WD.k = ((k % N.length) + N.length) % N.length; const n = N[WD.k], far = clamp(24 + n.wide*1.1 + (n.drop || 0)*2.2, 32, 170); let px, pz, yaw;
+  if (WD.side){ const b = 8 + n.wide*0.6; px = n.x + n.dx*2 - n.dz*b; pz = n.z + n.dz*2 + n.dx*b; yaw = Math.atan2(-n.dz, n.dx); }
+  else { const b = 6 + n.wide*0.5 + (n.drop || 0)*0.9; px = n.x + n.dx*b; pz = n.z + n.dz*b; yaw = Math.atan2(n.dx, n.dz); }
+  WD.fly = null; wdGo(px, pz, yaw, far, WD.side ? 0.55 : 0.42, quick); wdDraw();
+  return WD.say = `${WD.k + 1} of ${N.length}: ${wdLabel(n)}`; }
+function wdPath(i, q0){            // down a stream from one of its points, through whatever it joins: [x, z, width] a point
+  const P = []; let guard = 0, id = '', end = 'end';
+  while (i >= 0 && guard++ < 60){ const s = WD.S[i]; for (let q = q0; q < s.n; q++){ const o = q*5; P.push(s.p[o], s.p[o + 1], s.p[o + 3]); } id = s.id; end = s.end; if (s.end === 'sea' || s.next < 0) break; q0 = s.nextQ; i = s.next; }
+  return { P, id, end }; }
+function wdFlyOn(f, more){ for (let a = 0; a < more.P.length; a += 3){ const n = f.P.length; if (n && Math.hypot(more.P[a] - f.P[n - 3], more.P[a + 1] - f.P[n - 2]) < 0.05) continue; if (n) f.cum.push(f.cum[f.cum.length - 1] + Math.hypot(more.P[a] - f.P[n - 3], more.P[a + 1] - f.P[n - 2])); else f.cum.push(0); f.P.push(more.P[a], more.P[a + 1], more.P[a + 2]); }
+  f.total = f.cum[f.cum.length - 1] || 0; f.id = more.id; f.end = more.end; }
+function wdFly(X, Z){            // start down the chosen stream from the chosen point, or down the stream nearest a spot (her, if none is given)
+  if (!W.sw) return 'There is no map under this island.'; if (hero.boating) return 'Come ashore first.';
+  let i = WD.sel, q = WD.selQ; const hx = X === undefined ? hero.x + W.base.x : X, hz = Z === undefined ? hero.z + W.base.z : Z;
+  if (X !== undefined || i < 0 || !WD.S[i]){ if (X !== undefined || !WD.at) wdGraph(hx, hz); let bd = 1e9; i = -1; WD.S.forEach((s, j) => { for (let r = 0; r < s.n; r++){ const d = Math.hypot(s.p[r*5] - hx, s.p[r*5 + 1] - hz); if (d < bd){ bd = d; i = j; q = r; } } }); }
+  if (i < 0) return 'No stream within reach of here.';
+  const f = { P: [], cum: [], s: 0, k: 0, total: 0, id: '', end: '', paused: false, tried: false, hx: 0, hz: 0, wide: WD.S[i].wide }; wdFlyOn(f, wdPath(i, q)); if (f.P.length < 6) return 'That stream ends right here.';
+  { const l = Math.hypot(f.P[3] - f.P[0], f.P[4] - f.P[1]) || 1; f.hx = (f.P[3] - f.P[0])/l; f.hz = (f.P[4] - f.P[1])/l; }
+  WD.fly = f; wdGo(f.P[0], f.P[1], Math.atan2(-f.hx, -f.hz), clamp(34 + f.P[2]*1.5, 40, 150), 0.6, true);
+  return WD.say = `Flying ${wdStream(WD.S[i]).replace(/^A /, 'a ')}. X flags where she is.`; }
+function wdFlyPut(f, dt){            // put her where the flight has got to, the camera behind her looking the way the water goes
+  let k = f.k; while (k + 2 < f.cum.length && f.cum[k + 1] < f.s) k++; f.k = k; const a = k*3, t = clamp((f.s - f.cum[k])/Math.max(1e-6, f.cum[k + 1] - f.cum[k]), 0, 1);
+  const X = f.P[a] + (f.P[a + 3] - f.P[a])*t, Z = f.P[a + 1] + (f.P[a + 4] - f.P[a + 1])*t; f.wide = f.P[a + 2]; let dx = f.P[a + 3] - f.P[a], dz = f.P[a + 4] - f.P[a + 1]; const l = Math.hypot(dx, dz) || 1, kk = Math.min(1, dt*1.6);
+  f.hx += (dx/l - f.hx)*kk; f.hz += (dz/l - f.hz)*kk;
+  hero.x = X - W.base.x; hero.z = Z - W.base.z; hero.y = stepAt(hero.x, hero.z); hero.target = null; hero.pending = null;
+  cam.yaw = Math.atan2(-f.hx, -f.hz); cam.goalDist = clamp(34 + f.wide*1.5, 40, 150); cam.goalPitch = 0.6;
+  if (spiritsReady) for (const sp of W.spirits) if (!(sp.calm >= 4)) sp.calm = 4; }            // (no spirit comes for her while she is carried along)
+function wdFlyMore(f){            // the end of what was traced: look again from here, and go on if the stream does
+  if (f.end === 'sea' || f.tried) return false; f.tried = true; const n = f.P.length; wdGraph(f.P[n - 3], f.P[n - 2]); const i = WD.S.findIndex(s => s.id === f.id); if (i < 0 || WD.S[i].next < 0) return false;
+  wdFlyOn(f, wdPath(WD.S[i].next, WD.S[i].nextQ)); f.tried = false; return f.total > f.s + 1; }
+function wdFlyStep(ft, dt){            // one step of the flight; false when it is over
+  const f = WD.fly; if (!f) return false; f.s = Math.min(f.total, f.s + ft); wdFlyPut(f, dt);
+  if (f.s >= f.total - 0.01 && !wdFlyMore(f)){ WD.fly = null; WD.say = f.end === 'sea' ? 'The flight is over: it has reached the sea.' : 'The flight is over: the stream ends on the land here.'; toast(WD.say); return false; }
+  return true; }
+function wdFlag(note){            // write down where she is and how it looks from here
+  const X = Math.round(hero.x + W.base.x), Z = Math.round(hero.z + W.base.z), n = WD.k >= 0 && WD.N[WD.k] && Math.hypot(WD.N[WD.k].x - X, WD.N[WD.k].z - Z) < 140 ? WD.N[WD.k] : null, d = new Date(), p2 = v => String(v).padStart(2, '0');
+  const f = { when: `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`, hex: W.hex, x: X, z: Z, yaw: Math.round((((cam.yaw*180/Math.PI) % 360) + 540) % 360 - 180), dist: Math.round(cam.dist), pitch: +cam.pitch.toFixed(2),
+    wet: +creekRunU.value.x.toFixed(2), tod: +clock.tod.toFixed(1), on: n ? wdLabel(n) : WD.fly ? `flying a ${Math.round(WD.fly.wide)} ft stream` : '', note: String(note || '').replace(/\s+/g, ' ').trim().slice(0, 200) };
+  WD.flags.push(f); wdSave(); return f; }
+const wdLine = f => `FLAG ${f.when} hex ${f.hex} at ${f.x},${f.z} view ${f.yaw},${f.dist},${f.pitch} wet ${f.wet} tod ${f.tod} :: ${f.on ? '[' + f.on + '] ' : ''}${f.note}`;
+function wdSave(){ try { localStorage.setItem(WD_KEY, JSON.stringify(WD.flags)); } catch(e){} const t = wd$('wdFlags'); t.value = WD.flags.map(wdLine).join('\n'); t.scrollTop = 1e6; wd$('wdCopy').textContent = `Copy ${WD.flags.length} flag${WD.flags.length === 1 ? '' : 's'}`; wd$('wdClear').textContent = 'Clear flags'; wdDraw(); }
+function wdFlagNow(){            // the button and the X key
+  if (!W.sw){ toast('There is no map under this island.'); return; } const box = wd$('wdNote'), f = wdFlag(box.value);
+  if (f.note){ box.value = ''; WD.arm = -1; toast(`Flagged at ${f.x}, ${f.z}.`); } else { WD.arm = WD.flags.length - 1; if (WD.fly) WD.fly.paused = true; box.focus(); toast(`Flagged at ${f.x}, ${f.z}. Type what is wrong, then Enter.`); } }
+function wdNoteEnter(){ const box = wd$('wdNote'), f = WD.flags[WD.arm];
+  if (f && !f.note){ f.note = box.value.replace(/\s+/g, ' ').trim().slice(0, 200); wdSave(); toast('Noted.'); } else if (box.value.trim()){ const g = wdFlag(box.value); toast(`Flagged at ${g.x}, ${g.z}.`); }
+  box.value = ''; box.blur(); WD.arm = -1; if (WD.fly) WD.fly.paused = false; }
+function wdGoLine(text){            // "FLAG ... at x,z view yaw,dist,pitch ..." or just "x, z"
+  if (!W.sw) return 'There is no map under this island.'; if (hero.boating) return 'Come ashore first.';
+  const m = /at\s+(-?\d+)\s*,\s*(-?\d+)(?:\s+view\s+(-?\d+)\s*,\s*(\d+)\s*,\s*([\d.]+))?/.exec(text) || /(-?\d{2,})\s*,\s*(-?\d{2,})/.exec(text); if (!m) return 'Paste a flag line, or two numbers: x, z.';
+  const X = +m[1], Z = +m[2]; if (!World.madeAt(X, Z)) return 'That place has not been made yet.';
+  WD.fly = null; wdGo(X, Z, m[3] !== undefined ? +m[3]*Math.PI/180 : undefined, m[4] ? +m[4] : 0, m[5] ? +m[5] : 0); return `To ${X}, ${Z}.`; }
+function wdDraw(){            // the map
+  const cv = wd$('wdMap'); if (!cv || !DBG.on || !WD.at || !W.sw) return; const g = cv.getContext('2d'), w = cv.width, h = cv.height, k = Math.min(w, h)/(2*WD.R), X0 = WD.at[0], Z0 = WD.at[1], sx = x => w/2 + (x - X0)*k, sy = z => h/2 + (z - Z0)*k;
+  g.fillStyle = '#14163a'; g.fillRect(0, 0, w, h); g.lineCap = g.lineJoin = 'round';
+  WD.S.forEach((s, i) => { const p = s.p; g.beginPath(); for (let q = 0; q < s.n; q++){ const x = sx(p[q*5]), y = sy(p[q*5 + 1]); if (q) g.lineTo(x, y); else g.moveTo(x, y); }
+    g.strokeStyle = i === WD.sel ? '#f2d27a' : s.dry > 0.5 ? '#b9a67c' : '#6fc3ee'; g.lineWidth = clamp(s.wide*k*1.2, 1, 7) + (i === WD.sel ? 1.5 : 0); g.stroke(); });
+  for (const n of WD.N){ g.fillStyle = n.kind === 'fall' ? '#ffffff' : n.kind === 'join' ? '#8ef0c8' : n.kind === 'mouth' ? '#4f8ff0' : n.kind === 'spring' ? '#9be37a' : '#ff9a5a'; g.beginPath(); g.arc(sx(n.x), sy(n.z), n.kind === 'fall' ? 3 : 2.3, 0, 6.3); g.fill(); }
+  if (WD.k >= 0 && WD.N[WD.k]){ const n = WD.N[WD.k]; g.strokeStyle = '#f2d27a'; g.lineWidth = 1.5; g.beginPath(); g.arc(sx(n.x), sy(n.z), 7, 0, 6.3); g.stroke(); }
+  for (const f of WD.flags){ const x = sx(f.x), y = sy(f.z); if (x < 0 || y < 0 || x > w || y > h) continue; g.fillStyle = '#ff5a4a'; g.fillRect(x - 1, y - 10, 2, 10); g.beginPath(); g.moveTo(x + 1, y - 10); g.lineTo(x + 9, y - 7); g.lineTo(x + 1, y - 4); g.fill(); }
+  { const x = sx(hero.x + W.base.x), y = sy(hero.z + W.base.z), s = Math.sin(cam.yaw)*4, c = Math.cos(cam.yaw)*4; g.fillStyle = '#ffe14a'; g.beginPath(); g.moveTo(x - s*2, y - c*2); g.lineTo(x + c + s, y - s + c); g.lineTo(x - c + s, y + s + c); g.fill(); } }
+function wdSay(){ const el = wd$('wdNow'), f = WD.fly; if (!el) return;
+  if (!W.sw){ el.textContent = 'No map lies under this island.'; return; }
+  if (f){ el.textContent = `Flying a ${Math.round(f.wide)} ft stream: ${Math.round(f.s).toLocaleString()} of ${Math.round(f.total).toLocaleString()} ft, ${Math.round(WD.speed)} ft a second${f.paused ? ' (held while you type)' : ''}. X flags where she is.`; wd$('wdFly').textContent = 'Stop the flight'; return; }
+  wd$('wdFly').textContent = 'Fly'; const c = k => WD.N.filter(n => n.kind === k).length;
+  el.textContent = WD.say || `${WD.S.length} streams within ${WD.R.toLocaleString()} ft: ${c('fall')} falls, ${c('join')} joins, ${c('spring')} springs, ${c('mouth')} mouths, ${c('end')} dead ends. Click one on the map, or step through them.`; }
+function wdFrame(now){            // every frame while the World debug panel is open
+  const dt = Math.min(0.1, Math.max(0, (now - (WD.last || now))/1000)); WD.last = now; if (!W.sw) { if (now > WD.due){ WD.due = now + 1000; wdSay(); } return; }
+  if (WD.fly && !WD.fly.paused) wdFlyStep(WD.speed*dt, dt);
+  if (now > WD.due){ WD.due = now + 600; const X = hero.x + W.base.x, Z = hero.z + W.base.z; if (!WD.fly && (!WD.at || Math.hypot(X - WD.at[0], Z - WD.at[1]) > 350)){ WD.say = ''; wdGraph(); } else wdDraw(); wdSay(); } }
+wd$('wdNext').onclick = () => toast(wdShow(WD.k + 1)); wd$('wdPrev').onclick = () => toast(wdShow(WD.k - 1));
+wd$('wdSide').onclick = e => { WD.side = !WD.side; e.currentTarget.setAttribute('aria-pressed', WD.side); if (WD.k >= 0) toast(wdShow(WD.k)); };
+wd$('wdFly').onclick = () => { if (WD.fly){ WD.fly = null; WD.say = ''; toast('The flight is stopped.'); } else toast(wdFly()); wdSay(); };
+wd$('wdSlow').onclick = () => { WD.speed = clamp(WD.speed/1.5, 4, 90); toast(`${Math.round(WD.speed)} ft a second.`); }; wd$('wdFast').onclick = () => { WD.speed = clamp(WD.speed*1.5, 4, 90); toast(`${Math.round(WD.speed)} ft a second.`); };
+wd$('wdFlag').onclick = wdFlagNow;
+wd$('wdCopy').onclick = () => { const t = wd$('wdFlags'); if (!WD.flags.length){ toast('No flags yet.'); return; } t.focus(); t.select(); let ok = false; try { ok = document.execCommand('copy'); } catch(e){}
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t.value).then(() => toast('Copied. Paste them to Claude.'), () => toast(ok ? 'Copied. Paste them to Claude.' : 'The lines are selected: copy them by hand.')); else toast(ok ? 'Copied. Paste them to Claude.' : 'The lines are selected: copy them by hand.'); };
+wd$('wdClear').onclick = e => { if (!WD.flags.length) return; if (e.currentTarget.textContent !== 'Sure? Click again'){ e.currentTarget.textContent = 'Sure? Click again'; return; } WD.flags = []; WD.arm = -1; wdSave(); toast('The flags are cleared.'); };
+wd$('wdGo').onclick = () => toast(wdGoLine(wd$('wdTo').value));
+wd$('wdMap').onclick = e => { if (!WD.at) return; const cv = e.currentTarget, r = cv.getBoundingClientRect(), k = Math.min(cv.width, cv.height)/(2*WD.R), X = WD.at[0] + ((e.clientX - r.left)*cv.width/r.width - cv.width/2)/k, Z = WD.at[1] + ((e.clientY - r.top)*cv.height/r.height - cv.height/2)/k;
+  let b = -1, bq = 0, bd = 18/k; WD.S.forEach((s, i) => { for (let q = 0; q < s.n; q++){ const d = Math.hypot(s.p[q*5] - X, s.p[q*5 + 1] - Z); if (d < bd){ bd = d; b = i; bq = q; } } });
+  if (b < 0){ WD.sel = -1; WD.selId = ''; wdDraw(); toast('No stream there.'); return; } WD.sel = b; WD.selId = WD.S[b].id; WD.selQ = bq; wdDraw(); toast(`${wdStream(WD.S[b])}. "Fly" goes down it from there.`); };
+addEventListener('keydown', e => { const t = e.target;            // (first in line: typing in the desk's boxes never reaches the game, and X, [ and ] work only while the panel is open)
+  if (t && t.closest && t.closest('#wdDesk')){ e.stopImmediatePropagation(); if (e.key === 'Enter'){ if (t.id === 'wdNote') wdNoteEnter(); else if (t.id === 'wdTo') wd$('wdGo').click(); } else if (e.key === 'Escape') t.blur(); return; }
+  if (!DBG.on || !W || W.loading || e.metaKey || e.ctrlKey || e.altKey || battle.on || inside.on || (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  const k = e.key.toLowerCase(); if (k === 'x'){ e.preventDefault(); wdFlagNow(); } else if (k === ']') toast(wdShow(WD.k + 1)); else if (k === '[') toast(wdShow(WD.k - 1)); }, true);
+wdSave();
+window.TWWATER = {            // the same desk for the headless tools (tools/water/desk.py)
+  graph: (X, Z) => { wdGraph(X, Z); return { at: WD.at.map(Math.round), R: WD.R, streams: WD.S.map((s, i) => ({ i, id: s.id, name: s.river, wide: +s.wide.toFixed(1), len: Math.round(s.len), dry: +s.dry.toFixed(2), end: s.end, next: s.next, head: [Math.round(s.p[0]), Math.round(s.p[1])], tail: [Math.round(s.p[(s.n - 1)*5]), Math.round(s.p[(s.n - 1)*5 + 1])] })),
+    nodes: WD.N.map(n => ({ kind: n.kind, x: Math.round(n.x), z: Math.round(n.z), dx: +n.dx.toFixed(3), dz: +n.dz.toFixed(3), wide: +(+n.wide).toFixed(1), drop: n.drop || 0, dry: !!n.dry, ft: Math.round(n.ft), label: wdLabel(n) })) }; },
+  go: (X, Z, yawDeg, dist, pitch) => { WD.fly = null; wdGo(X, Z, yawDeg === undefined || yawDeg === null ? undefined : yawDeg*Math.PI/180, dist || 0, pitch || 0, true); return [Math.round(hero.x + W.base.x), Math.round(hero.z + W.base.z)]; },
+  show: (k, side) => { WD.side = !!side; return wdShow(k, true); },
+  fly: (X, Z) => { const say = wdFly(X, Z); if (WD.fly) WD.fly.paused = true; return { say, total: WD.fly ? Math.round(WD.fly.total) : 0 }; },            // (held: the tool steps it)
+  step: ft => { const on = wdFlyStep(ft, 0.25), f = WD.fly; return { on, s: f ? Math.round(f.s) : 0, total: f ? Math.round(f.total) : 0, wide: f ? +f.wide.toFixed(1) : 0, at: [Math.round(hero.x + W.base.x), Math.round(hero.z + W.base.z)], say: WD.say }; },
+  flag: note => wdLine(wdFlag(note)), flags: () => WD.flags.map(wdLine), where: () => ({ hex: W.hex, at: [Math.round(hero.x + W.base.x), Math.round(hero.z + W.base.z)], yaw: Math.round(cam.yaw*180/Math.PI), dist: Math.round(cam.dist), pitch: +cam.pitch.toFixed(2) }) };
+/* WATER-DESK-END */
 if (/debug/.test(location.hash)) dbgToggle(true);
 
 /* =====================================================================================

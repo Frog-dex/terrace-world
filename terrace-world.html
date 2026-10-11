@@ -5067,6 +5067,7 @@ function shiftLocal(dx, dz){       // the window moved: every local position mov
   for (const c of W.treeCache.values()) for (const t of c.list){ t.x = t.kx - W.base.x; t.z = t.kz - W.base.z; if (t.on) for (const p of t.parts){ p.px -= dx; p.pz -= dz; writePart(p, t); } }
   for (const t of W.trees) if (t.sapling){ sh(t); for (const p of t.parts){ p.px -= dx; p.pz -= dz; writePart(p, t); } }
   if (typeof MP !== 'undefined' && MP.others) for (const o of MP.others.values()){ o.x -= dx; o.z -= dz; o.tx -= dx; o.tz -= dz; }
+  if (window.__famShift) window.__famShift(dx, dz);          // the family by the house and the little ones (src/family/family.js)
 }
 function rebaseTo(X, Z, far){      // re-centre the window on a spot of the world. far = a journey: everything is made at once, behind the fade
   const bx = Math.round(X/64)*64, bz = Math.round(Z/64)*64, dx = bx - W.base.x, dz = bz - W.base.z, di = dx/CELL, dj = dz/CELL, obx = W.base.x, obz = W.base.z;
@@ -10827,7 +10828,12 @@ function setCharacter(code, src){
    The three Spirit Strikers Blu has drawn each have a male and a female. Play as one, and the other lives by the house.
    Spend time together and the two of you grow closer. When your hearts are full you can start a family: she is
    expecting for a while; then the frog lays her spawn, the lizard lays an egg, and the monkey has her baby. What was
-   laid hatches a little later. The baby follows you about, in Blu's own painting of it.
+   laid hatches a little later. The baby is Blu's own painting of it.
+   Who goes where (Blu, 2026-10-11: "They're not supposed to follow you everywhere. They're supposed to just stay at home.
+   And the babies come with you ... There should just be an option to leave the baby home and then take them out as well."):
+   the mate stays by the house and never walks after you; the little ones come along with you (on foot, afloat, in the
+   boat, on a journey); and at home a second prompt lets you leave them with the mate, or take them out again.
+   Everything here keeps its place in the WORLD when the game re-centres its window (shiftLocal calls __famShift).
    Blu, 2026-10-11: "you can't play as the baby, but we got to make the system where you can romance and make a baby
    monkey now, and I think baby lizard and baby frog." And: "she needs to get pregnant. So Lizard lay an egg. And then
    Frog lays a spawn. And then I think B does B shit, etc." (the bee and the others get a line in KIN when they are drawn)
@@ -10836,6 +10842,9 @@ function setCharacter(code, src){
    Edit this file, then run tools/patches/wire_family_kin.py to bake it into the game page. */
 const FAM = (() => {
   const KEY = 'tw-family-1', PREG_MS = 2*60*1000, HATCH_MS = 3*60*1000, CHEM_STEP = 20, COOLDOWN = 6000;
+  // home: the mate's spot, in feet from the door, and how far they potter from it. A little one further than SNAP_FT from you
+  // is set down beside you (it does not run across the map). The leave / take prompt shows within YARD_FT of the mate's spot.
+  const HOME = [8, 6], ROAM = 3, SNAP_FT = 45, YARD_FT = 14;
   // who goes with whom (her first), what their young are, what she lays (nothing: she has her baby) and where it waits to hatch (at: feet from the door)
   const KIN = {
     frog:   { pair: ['C1', 'C1M'], baby: 'B1', young: 'Baby Frog',   lays: 'spawn in the water by the house',       wait: 'Frogspawn on the way', soon: 'The frogspawn is on its way', egg: 0xe8f6ff, n: 14, at: [-6, 7] },
@@ -10860,10 +10869,29 @@ const FAM = (() => {
     S.chem = Math.max(0, Math.min(100, +S.chem || 0)); if (!S.eggs || typeof S.eggs.t0 !== 'number') S.eggs = null; if (!S.preg || typeof S.preg.t0 !== 'number') S.preg = null;
     if (!KIN[k].lays && S.eggs){ S.preg = S.preg || S.eggs; S.eggs = null; } }          // a monkey lays nothing: what an older save called her seed is her expecting
   st.kids = (Array.isArray(st.kids) ? st.kids : []).filter(k => k && typeof k === 'object').map(k => Object.assign({ b: 'B1' }, k));   // before this, every baby was a frog
+  st.kidsHome = st.kidsHome === true;                                       // the little ones wait at home (false: they come along with you)
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch(e){} };
 
-  let ready = false, mate = null, mateFor = null, building = false, kids = [], btn = null, lastT = 0, busyUntil = 0;
+  let ready = false, mate = null, mateFor = null, building = false, kids = [], btn = null, kidBtn = null, lastT = 0, busyUntil = 0;
   const eggs = {}, babyPics = {};
+  const homeAt = () => ({ x: W.door.x + HOME[0], z: W.door.z + HOME[1] });
+  const inWin = (x, z) => Math.abs(x) < HALF - 2 && Math.abs(z) < HALF - 2;          // inside the piece of the world that is made right now
+  const walled = (x, z) => (W.colliders || []).some(c => x > c.x0 - 1 && x < c.x1 + 1 && z > c.z0 - 1 && z < c.z1 + 1);
+  const deep = (x, z, ft) => wetAt(x, z) && !dockAt(x, z) && TIDE - stepAt(x, z) > ft;
+  function clear(x, z){                                                     // a spot inside the house is moved to the nearest spot outside its wall
+    for (const c of (W.colliders || [])) if (x > c.x0 - 1 && x < c.x1 + 1 && z > c.z0 - 1 && z < c.z1 + 1){
+      const l = x - (c.x0 - 1), r = (c.x1 + 1) - x, u = z - (c.z0 - 1), d = (c.z1 + 1) - z, m = Math.min(l, r, u, d);
+      if (m === l) x = c.x0 - 1; else if (m === r) x = c.x1 + 1; else if (m === u) z = c.z0 - 1; else z = c.z1 + 1; }
+    return [x, z];
+  }
+  const ring = (i, cx, cz, out) => { const a = i*1.3 + 2.2, r = 2.4 + (i%2)*.9 + (out || 0); return clear(cx + Math.cos(a)*r, cz + Math.sin(a)*r); };   // each little one's own place round you, or (further out, clear of the mate) round home
+  const SEATS = [[1.5, 1.1], [1.5, -1.1], [5, 0], [2.7, -1.3]];                // in the boat, feet ahead of its middle and to the side: the bow, ahead of the mast (you stand at 3.4)
+  const put = (s, p) => { s.x = s.tx = p[0]; s.z = s.tz = p[1]; };
+  // the game's window on the world moved (shiftLocal): the family moves the other way with everything else, so it stays where it was in the world
+  window.__famShift = (dx, dz) => {
+    for (const s of [mate, ...kids]) if (s){ s.x -= dx; s.z -= dz; s.tx -= dx; s.tz -= dz; for (const o of [s.mesh, s.shadow]){ o.position.x -= dx; o.position.z -= dz; } }
+    for (const g of Object.values(eggs)){ g.position.x -= dx; g.position.z -= dz; }
+  };
   function inked(img, hFt){
     const pad = 10, k = Math.min(1, 380/img.height), w = Math.round(img.width*k), h = Math.round(img.height*k);
     const tmp = document.createElement('canvas'); tmp.width = w + pad*2; tmp.height = h + pad*2; tmp.getContext('2d').drawImage(img, pad, pad, w, h);
@@ -10897,15 +10925,15 @@ const FAM = (() => {
     const m = mateOf(code);
     try {
       const p = m && await picOf(m);
-      if (p){ mate = inked(p.pic, HERO_FT*(CHARS[m].size || 1)*p.k); mate.code = m; mate.home = { x: W.door.x + 8, z: W.door.z + 6 }; mate.x = mate.tx = mate.home.x; mate.z = mate.tz = mate.home.z; }
+      if (p){ mate = inked(p.pic, HERO_FT*(CHARS[m].size || 1)*p.k); mate.code = m; const H = homeAt(); put(mate, [H.x, H.z]); }
     } catch(e){ console.error('family: could not draw ' + m, e); }
     building = false;
   }
-  async function addKid(i){
-    const b = (st.kids[i] && st.kids[i].b) || 'B1';
+  async function addKid(i, at){                                             // at: where it comes into the world (the egg, its mother), if it was just born
+    const b = (st.kids[i] && st.kids[i].b) || 'B1', atW = at && [at[0] + W.base.x, at[1] + W.base.z];      // (in world feet: the window may re-centre while the picture loads)
     try {
       if (!babyPics[b]) babyPics[b] = trimToArt(await load((typeof BABY_ART !== 'undefined' && BABY_ART && BABY_ART[b]) || BABY_FROG_SRC));   // his painted baby; the old frog drawing if there is none
-      const k = inked(babyPics[b], HERO_FT*.5); k.x = k.tx = hero.x + 2 + i; k.z = k.tz = hero.z + 2; kids.push(k);
+      const k = inked(babyPics[b], HERO_FT*.5), H = homeAt(); put(k, atW ? [atW[0] - W.base.x, atW[1] - W.base.z] : st.kidsHome ? ring(i, H.x, H.z, 2) : ring(i, hero.x, hero.z)); kids.push(k);
     } catch(e){ console.error('family: could not draw the baby ' + b, e); }
   }
   function layEggs(kin){
@@ -10918,16 +10946,27 @@ const FAM = (() => {
       if (spawn){ const d = new THREE.Mesh(new THREE.SphereGeometry(.11, 8, 6), dot); s.add(d); } grp.add(s); }
     grp.position.set(p.x, groundY(p.x, p.z), p.z); scene.add(grp); eggs[kin] = grp;
   }
-  function born(kin, how){
-    const S = st.by[kin]; S.chem = 40; st.kids.push({ born: Date.now(), b: KIN[kin].baby }); save(); addKid(st.kids.length - 1);
-    toast(`A ${KIN[kin].young} ${how}! ${st.kids.length > 1 ? 'You have ' + st.kids.length + ' little ones now.' : 'It follows you everywhere.'}`);
+  function born(kin, how, at){
+    const S = st.by[kin]; S.chem = 40; st.kids.push({ born: Date.now(), b: KIN[kin].baby }); save(); addKid(st.kids.length - 1, at);
+    toast(`A ${KIN[kin].young} ${how}! ${st.kids.length > 1 ? 'You have ' + st.kids.length + ' little ones now.' + (st.kidsHome ? ' It is at home with the others.' : '') : 'It comes along with you.'}`);
+  }
+  function mind(){                                                          // leave the little ones at home with the mate, or take them out again
+    st.kidsHome = !st.kidsHome; save();
+    const n = st.kids.length, who = n > 1 ? 'The little ones' : 'The little one', N = mate ? nameOf(mate.code) : '';
+    toast(st.kidsHome ? `${who} ${n > 1 ? 'stay' : 'stays'} at home${N ? ' with ' + N : ''}.` : `${who} ${n > 1 ? 'come' : 'comes'} along with you.`);
   }
   async function init(){
     if (ready || !W || !W.door) return; ready = true;
     st.kids.forEach((k, i) => addKid(i));
     for (const kin of Object.keys(KIN)) if (st.by[kin].eggs) layEggs(kin);
     btn = document.createElement('button'); btn.id = 'twFamBtn'; btn.hidden = true; document.body.appendChild(btn); btn.onclick = act;
-    addEventListener('keydown', e => { if (e.key && e.key.toLowerCase() === 'e' && btn && !btn.hidden){ e.preventDefault(); e.stopImmediatePropagation(); act(); } }, true);
+    // the leave / take prompt: the family prompt's own look, one row up (the row the "Jump down" prompt uses; that one wins if both are due)
+    kidBtn = document.createElement('button'); kidBtn.id = 'twKidBtn'; kidBtn.type = 'button'; kidBtn.hidden = true;
+    kidBtn.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--twBotH,132px) + 120px);z-index:12;font:700 16px 'Baloo 2',sans-serif;color:#2b2466;background:linear-gradient(180deg,#ffe796,#f7ca5c 62%,#eeac44);border:3px solid #2b2466;border-radius:14px;box-shadow:0 3px 0 #2b2466;padding:8px 18px;cursor:pointer;letter-spacing:.02em";
+    document.body.appendChild(kidBtn); kidBtn.onclick = e => { mind(); e.currentTarget.blur(); };
+    // E is the family prompt's key, unless the game itself has a use for E right here (the door, the boat)
+    const gameE = () => hero.boating || (W.boat && Math.hypot(hero.x - W.boat.x, hero.z - W.boat.z) < 11) || Math.hypot(hero.x - W.door.x, hero.z - W.door.z) < 5;
+    addEventListener('keydown', e => { if (e.key && e.key.toLowerCase() === 'e' && btn && !btn.hidden && !gameE()){ e.preventDefault(); e.stopImmediatePropagation(); act(); } }, true);
     requestAnimationFrame(frame);
   }
   const heartStr = S => { const n = Math.max(0, Math.min(5, Math.round(S.chem/20))); return '\u2665'.repeat(n) + '\u2661'.repeat(5 - n); };
@@ -10945,43 +10984,80 @@ const FAM = (() => {
     else if (S.eggs) toast(`${K.soon}. ${Math.max(1, Math.ceil((S.eggs.t0 + HATCH_MS - Date.now())/60000))} min to go.`);
     else { S.preg = { t0: Date.now() }; save(); toast(`You and ${N} start a family. ${sheIs(kin, 'expecting')}.`); }
   }
-  function stepSprite(s, dt, bounce){
-    const dx = s.tx - s.x, dz = s.tz - s.z, d = Math.hypot(dx, dz), sp = Math.min(d, dt*(bounce ? 9 : 4));
-    if (d > .05){ s.x += dx/d*sp; s.z += dz/d*sp; s.ph += dt*(bounce ? 12 : 7); }
-    const y = groundY(s.x, s.z), hop = d > .05 ? Math.abs(Math.sin(s.ph))*(bounce ? .6 : .35) : Math.abs(Math.sin(s.ph*.2))*.05;
+  function stepSprite(s, dt, speed, bounce, rideY){                         // rideY: standing on something (the boat's deck) at that height
+    const dx = s.tx - s.x, dz = s.tz - s.z, d = Math.hypot(dx, dz), sp = Math.min(d, dt*speed), going = d > .05;
+    if (going){ s.x += dx/d*sp; s.z += dz/d*sp; s.ph += dt*(bounce ? 12 : 7); }
+    const riding = rideY != null, afloat = !riding && deep(s.x, s.z, s.hFt*.4), g = groundY(s.x, s.z);
+    const y = riding ? rideY : afloat ? Math.max(g, TIDE - s.hFt*.6) : g;      // afloat: head above the water, whatever its size
+    const hop = riding || afloat ? 0 : going ? Math.abs(Math.sin(s.ph))*(bounce ? .6 : .35) : Math.abs(Math.sin(s.ph*.2))*.05;
     s.mesh.position.set(s.x, y + hop, s.z); s.mesh.rotation.y = Math.atan2(camera.position.x - s.x, camera.position.z - s.z);
-    s.mesh.rotation.z = d > .05 ? Math.sin(s.ph)*.08 : Math.sin(performance.now()/700 + s.ph)*.025;
-    s.shadow.position.set(s.x, y + .05, s.z);
+    s.mesh.rotation.z = going ? Math.sin(s.ph)*.08 : Math.sin(performance.now()/700 + s.ph)*.025;
+    s.shadow.position.set(s.x, y + .05, s.z); if (riding || afloat) s.shadow.visible = false;
   }
   function frame(now){
     const dt = Math.min(.05, (now - (lastT || now))/1000); lastT = now;
-    if (W){
-      const code = heroNow(); if (code !== mateFor && !building) retarget(code);      // a different hero: the other of their kind comes to live by the house
-      const show = !battle.on; if (mate) mate.mesh.visible = mate.shadow.visible = show; kids.forEach(k => { k.mesh.visible = k.shadow.visible = show; }); for (const g of Object.values(eggs)) g.visible = show;
+    if (W && W.door){
+      const code = heroNow(); if (code !== mateFor && !building) retarget(code);      // a different hero: the other of their kind is the one who lives by the house
+      const show = !battle.on, H = homeAt(), homeOn = inWin(H.x, H.z);
       let hd = 1e9;
       if (mate){
-        // the mate potters about their spot by the house; when you are close they come over
-        hd = Math.hypot(hero.x - mate.x, hero.z - mate.z);
-        if (hd < 9 && hd > 3.2){ mate.tx = hero.x + (mate.x - hero.x)/hd*3; mate.tz = hero.z + (mate.z - hero.z)/hd*3; }
-        else if (Math.random() < dt*.25){ mate.tx = mate.home.x + (Math.random() - .5)*10; mate.tz = mate.home.z + (Math.random() - .5)*10; }
-        stepSprite(mate, dt, false);
+        // the mate lives by the house: potters about their spot there and stays there, wherever you go
+        mate.mesh.visible = mate.shadow.visible = show && homeOn;
+        if (homeOn){
+          if (Math.hypot(mate.x - H.x, mate.z - H.z) > ROAM + 3) put(mate, [H.x, H.z]);
+          else if (Math.random() < dt*.25){ const a = Math.random()*6.283, r = Math.random()*ROAM, x = H.x + Math.cos(a)*r, z = H.z + Math.sin(a)*r; if (!walled(x, z) && !deep(x, z, .3)){ mate.tx = x; mate.tz = z; } }
+          stepSprite(mate, dt, 4, false);
+          hd = Math.hypot(hero.x - mate.x, hero.z - mate.z);
+        }
       }
-      kids.forEach((k, i) => { const a = i*1.3 + 2.2, r = 2.4 + (i%2)*.9, tx = hero.x + Math.cos(a)*r, tz = hero.z + Math.sin(a)*r;
-        if (Math.hypot(tx - k.tx, tz - k.tz) > 1.2){ k.tx = tx; k.tz = tz; } stepSprite(k, dt, true); });
+      const along = !st.kidsHome, boat = along && hero.boating && W.boat ? W.boat : null;
+      kids.forEach((k, i) => {
+        let on = show, speed = 9, rideY = null;
+        if (!boat) k.riding = false;
+        if (!along){                                                           // left at home: they play round the mate's spot
+          on = show && homeOn; speed = 5;
+          if (homeOn){
+            if (Math.hypot(k.x - H.x, k.z - H.z) > SNAP_FT) put(k, ring(i, H.x, H.z, 2));
+            else if (Math.random() < dt*.3 || Math.hypot(k.tx - H.x, k.tz - H.z) > 8){ const p = ring(i + Math.floor(Math.random()*5), H.x, H.z, 2); k.tx = p[0]; k.tz = p[1]; }
+          }
+        } else if (boat){                                                      // sailing: they ride in the bow with you, ahead of the mast
+          const c = Math.cos(boat.heading), n = Math.sin(boat.heading), [off, side] = SEATS[i%4], sx = boat.x + c*off + n*side, sz = boat.z - n*off + c*side;
+          const far = Math.hypot(sx - k.x, sz - k.z);                              // (the boat sails at 33 feet a second: nobody is left to swim after it)
+          if (k.riding || far < 3 || far > 12){ k.riding = true; put(k, [sx, sz]); rideY = hero.y; } else { k.tx = sx; k.tz = sz; speed = 60; }
+        } else {                                                               // with you: each keeps its place round you, and runs as fast as it must to keep up
+          const p = ring(i, hero.x, hero.z);
+          if (Math.hypot(hero.x - k.x, hero.z - k.z) > SNAP_FT) put(k, p);     // (a journey, a long jump, waking at home: set down beside you)
+          else if (Math.hypot(p[0] - k.tx, p[1] - k.tz) > 1.2){ k.tx = p[0]; k.tz = p[1]; }
+          speed = Math.max(9, Math.min(45, Math.hypot(k.tx - k.x, k.tz - k.z)*4));
+        }
+        k.mesh.visible = k.shadow.visible = on;
+        if (along || homeOn) stepSprite(k, dt, speed, true, rideY);
+      });
       for (const kin of Object.keys(KIN)){ const S = st.by[kin], K = KIN[kin];
         if (S.preg && Date.now() - S.preg.t0 > PREG_MS){ S.preg = null;
           if (K.lays){ S.eggs = { t0: Date.now() }; save(); layEggs(kin); toast(`${heroNow() === herOf(kin) ? 'You lay' : she(kin) + ' lays'} ${K.lays}. It will hatch soon.`); }
-          else born(kin, 'is born'); }
+          else born(kin, 'is born', heroNow() === herOf(kin) ? ring(kids.length, hero.x, hero.z) : ring(kids.length, H.x, H.z, 2)); }
         const g = eggs[kin]; if (!g) continue;
-        g.children.forEach((e, q) => { e.scale.setScalar(1 + Math.sin(now/500 + q)*.06); });
-        if (S.eggs && Date.now() - S.eggs.t0 > HATCH_MS){ scene.remove(g); g.children.forEach(e => { e.geometry.dispose(); e.children.forEach(d => d.geometry.dispose()); }); delete eggs[kin]; S.eggs = null; born(kin, 'hatched'); } }
+        g.position.x = W.door.x + K.at[0]; g.position.z = W.door.z + K.at[1];           // by the door of the house as it stands now (a new world moves the house)
+        const gOn = inWin(g.position.x, g.position.z); g.visible = show && gOn;          // (they hatch on time whether or not you are there to see)
+        if (gOn){ g.position.y = groundY(g.position.x, g.position.z); g.children.forEach((e, q) => { e.scale.setScalar(1 + Math.sin(now/500 + q)*.06); }); }
+        if (S.eggs && Date.now() - S.eggs.t0 > HATCH_MS){ scene.remove(g); g.children.forEach(e => { e.geometry.dispose(); e.children.forEach(d => d.geometry.dispose()); }); delete eggs[kin]; S.eggs = null; born(kin, 'hatched', clear(g.position.x + 1, g.position.z + 1)); } }
       const hudBox = (() => { const h = document.getElementById('twHud'); return !!(h && h.shadowRoot && h.shadowRoot.querySelector('.box3d.open')); })();
       const kin = kinOf(code), S = kin && st.by[kin];
-      const near = !!S && !!mate && mate.code === mateOf(code) && hd < 5.5 && !battle.on && !inside.on && !hudBox && document.getElementById('bag').hidden;
+      const idle = !battle.on && !inside.on && !hudBox && document.getElementById('bag').hidden;
+      const near = !!S && !!mate && mate.code === mateOf(code) && hd < 5.5 && idle;
       btn.hidden = !near; if (near) btn.textContent = S.chem < 100 ? `Spend time with ${nameOf(mate.code)}  ${heartStr(S)}` : S.preg ? sheIs(kin, 'expecting') : S.eggs ? KIN[kin].wait : `Start a family with ${nameOf(mate.code)}  \u2665`;
+      // at home, with little ones: leave them with the mate, or take them out again
+      const jb = document.getElementById('twJumpBtn'), n = st.kids.length;
+      const offer = idle && n > 0 && homeOn && !hero.boating && Math.hypot(hero.x - H.x, hero.z - H.z) < YARD_FT && !(jb && !jb.hidden);
+      kidBtn.hidden = !offer;
+      if (offer){ const say = st.kidsHome ? `Take the little one${n > 1 ? 's' : ''} with you` : `Leave the little one${n > 1 ? 's' : ''} at home`; if (kidBtn.textContent !== say) kidBtn.textContent = say; }
     }
     requestAnimationFrame(frame);
   }
+  window.__twFam = () => { const B = (W && W.base) || { x: 0, z: 0 }, r = v => Math.round(v*100)/100, at = s => s && { x: r(s.x + B.x), z: r(s.z + B.z), y: r(s.mesh.position.y), on: s.mesh.visible };
+    const eg = {}; for (const k of Object.keys(eggs)) eg[k] = { x: r(eggs[k].position.x + B.x), z: r(eggs[k].position.z + B.z), on: eggs[k].visible };
+    return { kidsHome: st.kidsHome, mate: at(mate), kids: kids.map(at), eggs: eg, home: W && W.door ? { x: r(W.door.x + HOME[0] + B.x), z: r(W.door.z + HOME[1] + B.z) } : null, hero: { x: r(hero.x + B.x), z: r(hero.z + B.z), y: r(hero.y) } }; };   // test hook
   return { init, st };
 })();
 /* FAMILY-END */

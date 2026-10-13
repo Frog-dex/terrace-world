@@ -11534,33 +11534,38 @@ try {
 })(typeof window !== 'undefined' ? window : this);
 
 /* THE PATHS: nobody lays a road. The ground wears where feet go, and the worn ground is the road.
-   Prepared by: Claude (Claude Code), 2026-10-11. Plain ASCII, no closing script tag, three.js r128.
+   Prepared by: Claude (Claude Code), 2026-10-11; made into LANES 2026-10-12. Plain ASCII, no closing script tag, three.js r128.
 
    Blu, Oct 11: "I don't know how the roads work in Foundation ... It's based off of your people around it. I think they
    automatically make paths." That is how Foundation does it: there is no road tool; the routes its villagers keep walking show
    on the ground, and a path nobody uses fades again.
+   Blu, Oct 12, on the first paths (every walker found its own way over 2 ft cells, corner to corner, and the town was covered in
+   blotches): "The paths that the spirit strikers are making ... they need the paths and stuff to be organized."
 
    THE RULES (all of them)
-   1. The land is a grid of 2 ft cells. Every cell has a WEAR from 0 to 1.
-   2. A walker (a creature at work, or her) adds wear to the cell it is on and a little to the four beside it.
-   3. Wear fades by itself, slowly; a path nobody walks is gone in about ten minutes.
-   4. A cell shows as trodden grass from 0.3 and as bare earth from 0.8, one small round patch a cell, lying on the land.
-   5. A walker looking for its way would rather walk on worn ground than fresh (fresh costs 2.4 times as much), so the walkers
-      share their tracks and the tracks join into a few roads. Buildings and water are walked round.
-   Wear is kept in WORLD cells, so the paths stay put when the game re-centres its window.
+   1. The land is one board of LANES: squares of 4 ft, the same board everywhere (it is counted in world feet), so every street
+      lines up with every other.
+   2. A walker goes from lane to lane, straight up, down or across the board, never corner to corner.
+   3. Finding its way, a walker would rather stay on a lane that is already worn (fresh ground costs three times as much) and
+      would rather not turn (a turn costs as much as two worn lanes). So ways run straight, walkers share the streets there are,
+      and a town ends up with a few straight streets. Buildings and water are walked round.
+   4. A walker wears the lane it is in. Wear is 0 to 1 and fades by itself; a street nobody walks is gone in about ten minutes.
+   5. A lane shows from 0.3 as trodden grass and from 0.8 as bare earth: four flat tiles, one for each 2 ft piece of land the
+      lane covers, each lying on its own terrace.
+   Wear is kept in WORLD lanes, so the streets stay put when the game re-centres its window.
 
    host: THREE, ramp, base() -> {x, z}, groundY(lx, lz), wet(lx, lz), hero() -> {x, z}. */
 (function (root) {
   'use strict';
   function Paths(host, parent) {
-    var T = host.THREE, CELL = 2, CAP = 3600, OFF = 1048576, MUL = 2097152;
-    var wear = new Map(), mesh = null, since = 9, dirty = true, _m = new T.Matrix4(), _q = new T.Quaternion(), _p = new T.Vector3(), _s = new T.Vector3(), _e = new T.Euler(), _c = new T.Color();
+    var T = host.THREE, LANE = 4, SUB = 2, CAP = 6000, OFF = 524288, MUL = 1048576, FRESH = 3, TURN = 2.2;
+    var wear = new Map(), mesh = null, since = 9, dirty = true, _m = new T.Matrix4(), _c = new T.Color();
     var grass = new T.Color('#a7b565'), earth = new T.Color('#b08a5a');
     function key(cx, cz) { return (cx + OFF) * MUL + (cz + OFF); }
     function add(cx, cz, a) { var k = key(cx, cz), w = (wear.get(k) || 0) + a; wear.set(k, w > 1 ? 1 : w); }
-    function at(x, z) { return wear.get(key(Math.floor(x / CELL), Math.floor(z / CELL))) || 0; }
+    function at(x, z) { return wear.get(key(Math.floor(x / LANE), Math.floor(z / LANE))) || 0; }
     function make() {
-      var geo = new T.CircleGeometry(1.4, 7).rotateX(-Math.PI / 2), ones = new Float32Array(geo.attributes.position.count * 3).fill(1); geo.setAttribute('color', new T.BufferAttribute(ones, 3));      // (at r128 a colour for each patch only shows on a material that also reads colours from the shape)
+      var geo = new T.PlaneGeometry(SUB + 0.03, SUB + 0.03).rotateX(-Math.PI / 2), ones = new Float32Array(geo.attributes.position.count * 3).fill(1); geo.setAttribute('color', new T.BufferAttribute(ones, 3));      // (at r128 a colour for each tile only shows on a material that also reads colours from the shape)
       mesh = new T.InstancedMesh(geo, new T.MeshToonMaterial({ color: 0xffffff, vertexColors: true, gradientMap: host.ramp || null, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3, depthWrite: false }), CAP);
       mesh.instanceColor = new T.BufferAttribute(new Float32Array(CAP * 3), 3);                              // (made here at full size: three makes it only as long as the count at the first colour, and the count starts at none)
       mesh.frustumCulled = false; mesh.renderOrder = 1; mesh.count = 0; mesh.name = 'tw-paths'; parent.add(mesh);
@@ -11568,52 +11573,59 @@ try {
     function draw() {
       if (!mesh) make(); var bs = host.base(), h = host.hero(), n = 0, hx = h.x + bs.x, hz = h.z + bs.z;
       wear.forEach(function (w, k) {
-        if (w < 0.3 || n >= CAP) return; var cx = Math.floor(k / MUL) - OFF, cz = k % MUL - OFF, x = (cx + 0.5) * CELL, z = (cz + 0.5) * CELL;
-        if (Math.abs(x - hx) > 420 || Math.abs(z - hz) > 420) return;                                   // (only the land that is made round her has a height to lie on)
-        var lx = x - bs.x, lz = z - bs.z; if (host.wet(lx, lz)) return;
-        var t = w >= 0.8 ? 1 : (w - 0.3) / 0.5, sc = 0.78 + 0.5 * t, j = ((cx * 7 + cz * 13) % 5) * 0.11;
-        _e.set(0, (cx * 3 + cz) % 7, 0); _q.setFromEuler(_e); _p.set(x + j - 0.22, host.groundY(lx, lz) + 0.06, z - j + 0.22); _s.set(sc, 1, sc);
-        mesh.setMatrixAt(n, _m.compose(_p, _q, _s)); mesh.setColorAt(n, _c.copy(grass).lerp(earth, t)); n++;
+        if (w < 0.3 || n + 4 > CAP) return; var cx = Math.floor(k / MUL) - OFF, cz = k % MUL - OFF, x0 = cx * LANE, z0 = cz * LANE, i, j;
+        if (Math.abs(x0 - hx) > 420 || Math.abs(z0 - hz) > 420) return;                                 // (only the land that is made round her has a height to lie on)
+        _c.copy(grass).lerp(earth, w >= 0.8 ? 1 : (w - 0.3) / 0.5);
+        for (j = 0; j < LANE / SUB; j++) for (i = 0; i < LANE / SUB; i++) { var x = x0 + (i + 0.5) * SUB, z = z0 + (j + 0.5) * SUB, lx = x - bs.x, lz = z - bs.z; if (host.wet(lx, lz)) continue;
+          mesh.setMatrixAt(n, _m.makeTranslation(x, host.groundY(lx, lz) + 0.06, z)); mesh.setColorAt(n, _c); n++; }
       });
       mesh.count = n; mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; dirty = false;
     }
-    // the cheapest way from a to b over the land inside a circle; blocked(x, z) says where nobody can walk. Worn ground is cheap.
+    // The way from a to b over the lanes inside a circle; blocked(x, z) says where nobody can walk. It comes back as the corners
+    // of the way (lane centres) and then b itself, so a walker going from point to point walks it in straight lines.
     function route(ax, az, bx, bz, blocked, cx0, cz0, r) {
-      var n = Math.ceil((r * 2) / CELL) + 2, ox = cx0 - r - CELL, oz = cz0 - r - CELL, N = n * n, free = new Uint8Array(N), i, j;
-      for (j = 0; j < n; j++) for (i = 0; i < n; i++) { var x = ox + (i + 0.5) * CELL, z = oz + (j + 0.5) * CELL; free[j * n + i] = Math.hypot(x - cx0, z - cz0) <= r + 1 && !blocked(x, z) ? 1 : 0; }
-      function cell(x, z) { var ci = Math.max(0, Math.min(n - 1, Math.floor((x - ox) / CELL))), cj = Math.max(0, Math.min(n - 1, Math.floor((z - oz) / CELL))), k, d, a, bi, bj;
+      var i0 = Math.floor((cx0 - r) / LANE) - 1, j0 = Math.floor((cz0 - r) / LANE) - 1, n = Math.ceil(2 * r / LANE) + 3, N = n * n, free = new Uint8Array(N), i, j;
+      for (j = 0; j < n; j++) for (i = 0; i < n; i++) { var x = (i0 + i + 0.5) * LANE, z = (j0 + j + 0.5) * LANE;      // (a lane is free if its middle and the middles of its four pieces all are, so a street does not clip a building's corner)
+        free[j * n + i] = Math.hypot(x - cx0, z - cz0) <= r + 2 && !blocked(x, z) && !blocked(x - 1, z - 1) && !blocked(x + 1, z - 1) && !blocked(x - 1, z + 1) && !blocked(x + 1, z + 1) ? 1 : 0; }
+      function cell(x, z) { var ci = Math.max(0, Math.min(n - 1, Math.floor(x / LANE) - i0)), cj = Math.max(0, Math.min(n - 1, Math.floor(z / LANE) - j0)), d, a, bi, bj;
         if (free[cj * n + ci]) return cj * n + ci;
-        for (d = 1; d < 9; d++) for (a = 0; a < 16; a++) { bi = ci + Math.round(Math.cos(a / 16 * 6.283) * d); bj = cj + Math.round(Math.sin(a / 16 * 6.283) * d); if (bi >= 0 && bj >= 0 && bi < n && bj < n && free[bj * n + bi]) return bj * n + bi; }
+        for (d = 1; d < 7; d++) for (a = 0; a < 16; a++) { bi = ci + Math.round(Math.cos(a / 16 * 6.283) * d); bj = cj + Math.round(Math.sin(a / 16 * 6.283) * d); if (bi >= 0 && bj >= 0 && bi < n && bj < n && free[bj * n + bi]) return bj * n + bi; }
         return -1; }
-      var s = cell(ax, az), g = cell(bx, bz); if (s < 0 || g < 0) return [[bx, bz]];
-      var cost = new Float32Array(N).fill(1e9), from = new Int32Array(N).fill(-1), heap = [[0, s]], done = new Uint8Array(N), gi = g % n, gj = (g - gi) / n; cost[s] = 0;
-      function push(e) { heap.push(e); var k = heap.length - 1, p; while (k > 0 && heap[p = (k - 1) >> 1][0] > heap[k][0]) { var t = heap[p]; heap[p] = heap[k]; heap[k] = t; k = p; } }
+      var s = cell(ax, az), g = cell(bx, bz); if (s < 0 || g < 0 || s === g) return [[bx, bz]];
+      // each place is a lane and the way the walker faces in it (4 ways), so that a turn can cost
+      var DI = [1, 0, -1, 0], DJ = [0, 1, 0, -1], cost = new Float32Array(N * 4).fill(1e9), from = new Int32Array(N * 4).fill(-1), done = new Uint8Array(N * 4), heap = [], gi = g % n, gj = (g - gi) / n, d, end = -1;
+      function push(e) { heap.push(e); var k = heap.length - 1, p, t; while (k > 0 && heap[p = (k - 1) >> 1][0] > heap[k][0]) { t = heap[p]; heap[p] = heap[k]; heap[k] = t; k = p; } }
       function pop() { var top = heap[0], last = heap.pop(), k = 0, a, b, m, t; if (heap.length) { heap[0] = last; for (;;) { a = k * 2 + 1; b = a + 1; m = k; if (a < heap.length && heap[a][0] < heap[m][0]) m = a; if (b < heap.length && heap[b][0] < heap[m][0]) m = b; if (m === k) break; t = heap[m]; heap[m] = heap[k]; heap[k] = t; k = m; } } return top; }
+      for (d = 0; d < 4; d++) { cost[s * 4 + d] = 0; push([0, s * 4 + d]); }                              // (it may set off any way: the first step is not a turn)
       while (heap.length) {
-        var cur = pop()[1]; if (done[cur]) continue; done[cur] = 1; if (cur === g) break; var ci = cur % n, cj = (cur - ci) / n, di, dj;
-        for (dj = -1; dj <= 1; dj++) for (di = -1; di <= 1; di++) { if (!di && !dj) continue; var ii = ci + di, jj = cj + dj; if (ii < 0 || jj < 0 || ii >= n || jj >= n) continue; var nk = jj * n + ii;
-          if (!free[nk] || done[nk] || (di && dj && (!free[cj * n + ii] || !free[jj * n + ci]))) continue;
-          var w = at(ox + (ii + 0.5) * CELL, oz + (jj + 0.5) * CELL), c = cost[cur] + (di && dj ? 1.414 : 1) * (w >= 0.3 ? 1 : 2.4);
-          if (c < cost[nk]) { cost[nk] = c; from[nk] = cur; push([c + Math.hypot(ii - gi, jj - gj), nk]); } }
+        var cur = pop()[1]; if (done[cur]) continue; done[cur] = 1; var cc = cur >> 2, cd = cur & 3; if (cc === g) { end = cur; break; }
+        var ci = cc % n, cj = (cc - ci) / n;
+        for (d = 0; d < 4; d++) { var ii = ci + DI[d], jj = cj + DJ[d]; if (ii < 0 || jj < 0 || ii >= n || jj >= n) continue; var nc = jj * n + ii, ns = nc * 4 + d; if (!free[nc] || done[ns]) continue;
+          var c = cost[cur] + ((wear.get(key(i0 + ii, j0 + jj)) || 0) >= 0.3 ? 1 : FRESH) + (d !== cd ? TURN : 0);
+          if (c < cost[ns]) { cost[ns] = c; from[ns] = cur; push([c + Math.abs(ii - gi) + Math.abs(jj - gj), ns]); } }
       }
-      if (from[g] < 0 && g !== s) return [[bx, bz]];
-      var out = [[bx, bz]], k = g, step = 0; for (; k !== -1 && k !== s; k = from[k]) { if (step++ % 2 === 0) out.unshift([ox + (k % n + 0.5) * CELL, oz + (Math.floor(k / n) + 0.5) * CELL]); }
-      return out;
+      if (end < 0) return [[bx, bz]];
+      var cells = [], k; for (k = end; k !== -1; k = from[k]) cells.unshift(k >> 2);
+      var out = []; for (k = 0; k < cells.length; k++) {                                              // (only the corners are kept: between them she walks straight)
+        var a0 = cells[k - 1], a1 = cells[k], a2 = cells[k + 1]; if (k > 0 && k < cells.length - 1 && a1 - a0 === a2 - a1) continue;
+        out.push([(i0 + a1 % n + 0.5) * LANE, (j0 + Math.floor(a1 / n) + 0.5) * LANE]); }
+      out.push([bx, bz]); return out;
     }
     return {
-      at: at, route: route,
-      // a walker is at this spot (world feet): the ground there wears a little
-      walk: function (x, z, a) { var cx = Math.floor(x / CELL), cz = Math.floor(z / CELL); add(cx, cz, a); a *= 0.22; add(cx + 1, cz, a); add(cx - 1, cz, a); add(cx, cz + 1, a); add(cx, cz - 1, a); dirty = true; },
+      at: at, route: route, lane: LANE,
+      // a walker is at this spot (world feet): the lane it is in wears a little
+      walk: function (x, z, a) { add(Math.floor(x / LANE), Math.floor(z / LANE), a); dirty = true; },
       // a whole way trodden once (so that the first walk already shows): pts in world feet
-      tread: function (pts, a) { for (var i = 1; i < pts.length; i++) { var ax = pts[i - 1][0], az = pts[i - 1][1], d = Math.hypot(pts[i][0] - ax, pts[i][1] - az), n = Math.max(1, Math.ceil(d / 1.6)), k; for (k = 0; k <= n; k++) this.walk(ax + (pts[i][0] - ax) * k / n, az + (pts[i][1] - az) * k / n, a); } },
+      tread: function (pts, a) { for (var i = 1; i < pts.length; i++) { var ax = pts[i - 1][0], az = pts[i - 1][1], d = Math.hypot(pts[i][0] - ax, pts[i][1] - az), n = Math.max(1, Math.ceil(d / 2)), k; for (k = 0; k <= n; k++) this.walk(ax + (pts[i][0] - ax) * k / n, az + (pts[i][1] - az) * k / n, a); } },
       tick: function (dt) { since += dt; if (since < 2) return; var f = 0.0042 * since / 2; since = 0;
         wear.forEach(function (w, k) { w -= f; if (w <= 0.02) wear.delete(k); else wear.set(k, w); }); if (wear.size || dirty || (mesh && mesh.count)) draw(); },
       redraw: function () { dirty = true; since = 9; },
       clear: function () { wear.clear(); dirty = true; since = 9; },
       get size() { return wear.size; },
-      // kept with the town: the cells that show, as [cell x, cell z, wear in hundredths], three numbers a cell
-      dump: function () { var out = []; wear.forEach(function (w, k) { if (w >= 0.25 && out.length < CAP * 3) out.push(Math.floor(k / MUL) - OFF, k % MUL - OFF, Math.round(w * 100)); }); return out; },
-      load: function (a) { wear.clear(); if (Array.isArray(a)) for (var i = 0; i + 2 < a.length; i += 3) wear.set(key(a[i], a[i + 1]), a[i + 2] / 100); dirty = true; since = 9; }
+      // kept with the town: the word 'lanes4', then the lanes that show as [lane x, lane z, wear in hundredths], three numbers a lane.
+      // (Wear kept before the lanes, in 2 ft cells with no word in front, is let go: the walkers tread their streets again in a minute.)
+      dump: function () { var out = ['lanes4']; wear.forEach(function (w, k) { if (w >= 0.25 && out.length < 4500) out.push(Math.floor(k / MUL) - OFF, k % MUL - OFF, Math.round(w * 100)); }); return out; },
+      load: function (a) { wear.clear(); if (Array.isArray(a) && a[0] === 'lanes4') for (var i = 1; i + 2 < a.length; i += 3) wear.set(key(a[i], a[i + 1]), a[i + 2] / 100); dirty = true; since = 9; }
     };
   }
   root.TWPaths = Paths;
@@ -11757,7 +11769,7 @@ try {
     function canPay(c) { for (var k in c || {}) if (host.have(k) < c[k]) return false; return true; }
     function pay(c, back) { if (S.free) return; for (var k in c || {}) { if (back) host.give(k, c[k]); else host.take(k, c[k]); } }
     function check(t, x, z, rot, skip) {
-      var def = defs[t], me = { x: x, z: z, rot: rot }, hw = def.fp[0] / 2, hd = def.fp[1] / 2, bs = host.base(), pts = [], i, lo = 1e9, hi = -1e9;
+      var def = defs[t], me = { t: t, x: x, z: z, rot: rot }, hw = def.fp[0] / 2, hd = def.fp[1] / 2, bs = host.base(), pts = [], i, k, lo = 1e9, hi = -1e9;
       [[0, 0], [-hw, -hd], [hw, -hd], [-hw, hd], [hw, hd], [0, -hd], [0, hd], [-hw, 0], [hw, 0]].forEach(function (p) { pts.push(spot(me, p[0], p[1])); });
       if (def.kind === 'anchor') { if (anchors().some(function (a) { return a !== skip && Math.hypot(a.x - x, a.z - z) < reach(a) * 0.6; })) return 'Too close to another workshop.'; }
       else { var a = anchorAt(x, z); if (!a) return anchors().length ? 'Outside the workshop\'s land.' : 'Put a workshop down first.';
@@ -11767,6 +11779,13 @@ try {
         var y = host.groundY(lx, lz); lo = Math.min(lo, y); hi = Math.max(hi, y); }
       if (hi - lo > 3.2) return 'The ground is too steep here.';
       for (i = 0; i < S.builds.length; i++) if (S.builds[i] !== skip && overlap(me, def, S.builds[i], defs[S.builds[i].t], 1.2)) return 'Something is already there.';
+      // A DOOR IS NEVER SHUT IN (Oct 12: a door that faced a neighbour's wall put her inside that wall when she stepped out, and she could
+      // not move): the five feet in front of every door stay clear, this building's and every other's. And nothing is built on top of her.
+      var front = function (o) { return [door(o, 1.6), door(o, 3.2), door(o, 4.8)]; }, mine = front(me);
+      for (i = 0; i < S.builds.length; i++) { var o = S.builds[i]; if (o === skip) continue; var theirs = front(o);
+        for (k = 0; k < 3; k++) { if (inside(o, mine[k][0], mine[k][1], 0.6)) return 'Its door would be shut in by the ' + defs[o.t].name.toLowerCase() + '.';
+          if (inside(me, theirs[k][0], theirs[k][1], 0.6)) return 'It would shut in the door of the ' + defs[o.t].name.toLowerCase() + '.'; } }
+      var hh = host.hero(); if (hh && inside(me, hh.x + bs.x, hh.z + bs.z, 1.5)) return 'You are standing there.';
       if (!skip && !S.free && !canPay(def.cost)) return 'Needs ' + costText(def.cost) + '.';
       return null;
     }
@@ -11828,7 +11847,7 @@ try {
       var was = {}, now = [], who = {}; workers.forEach(function (w) { was[w.key] = w; }); host.creatures().forEach(function (c) { who[c.id] = c; });
       function put(b, c, i, own) { var key = b.n + ':' + c.id, w = was[key]; if (w && w.b === b) { delete was[key]; w.i = i; now.push(w); return; }
         var m = host.creatureMesh ? host.creatureMesh(c) : blob(c.col), d0 = door(b, 2.5); m.position.set(d0[0], b.y, d0[1]); rootG.add(m);
-        now.push({ key: key, m: m, b: b, i: i, own: own, x: d0[0], z: d0[1], stage: 0, leg: null, k: 0, wait: Math.random() * 2, trips: 0, fresh: true }); }
+        var idle = !defs[b.t].job; now.push({ key: key, m: m, b: b, i: i, own: own, x: d0[0], z: d0[1], stage: idle ? 2 : 0, leg: null, k: 0, wait: idle ? 3 + Math.random() * 8 : Math.random() * 2, trips: 0, fresh: true }); }
       S.builds.forEach(function (b) { (b.hands || []).forEach(function (id, i) { if (who[id]) put(b, who[id], i, false); });
         if (S.given !== false && defs[b.t].kind !== 'anchor') put(b, { id: 'own', own: b.n, name: 'Its own hand', col: '#d9a45b' }, 3, true); });
       for (var k in was) rootG.remove(was[k].m); workers = now;
@@ -11837,29 +11856,35 @@ try {
       var e = new T.Mesh(new T.SphereGeometry(1.1, 10, 8), mats.edge); e.scale.setScalar(1.09); body.add(e);
       [-0.4, 0.4].forEach(function (x) { var eye = new T.Mesh(new T.SphereGeometry(0.2, 6, 5), new T.MeshBasicMaterial({ color: 0x1d2433 })); eye.position.set(x, 1.75, 0.95); g.add(eye); }); return g; }
     function blockedAt(x, z) { var bs = host.base(), i; if (host.wet(x - bs.x, z - bs.z)) return true; for (i = 0; i < S.builds.length; i++) if (defs[S.builds[i].t].kind !== 'anchor' && inside(S.builds[i], x, z, 0.8)) return true; return false; }
-    // where a creature goes for its work: the nearest tree for one that works trees, else a spot out toward the edge of the circle
-    function workSpot(w, a) { var b = w.b, job = defs[b.t].job, bs = host.base(), tr = job.from === 'trees' && host.nearTree ? host.nearTree(b.x - bs.x, b.z - bs.z, 100) : null;
-      if (tr) return [tr.x + bs.x + 2.5, tr.z + bs.z + 2.5];
-      var ang = (b.n * 2.399 + w.i * 1.3 + (w.trips % 3) * 0.5), r = Math.min(reach(a) - 8, 46 + (b.n * 13 % 30)), x = b.x + Math.cos(ang) * r, z = b.z + Math.sin(ang) * r, d = Math.hypot(x - a.x, z - a.z), m = reach(a) - 6;
-      if (d > m) { x = a.x + (x - a.x) * m / d; z = a.z + (z - a.z) * m / d; } return [x, z]; }
+    // Where a creature goes for its work. Only work on trees has somewhere to go (the nearest tree). Every other kind of work is done
+    // at its own building, so the only ways worn are streets between doors and the workshop (Blu, Oct 12: "they need the paths
+    // and stuff to be organized"; before this each worker also walked out to a spot of its own on the land, and the town was a web).
+    function workSpot(w) { var b = w.b, job = defs[b.t].job, bs = host.base(), tr = job && job.from === 'trees' && host.nearTree ? host.nearTree(b.x - bs.x, b.z - bs.z, 100) : null;
+      return tr ? [tr.x + bs.x + 2.5, tr.z + bs.z + 2.5] : null; }
+    function potter(w, dt, bs) {                                           // a person with no work to walk to potters about by the door
+      if (w.potT > 0) w.potT -= dt;
+      else { if (!w.pot) { var d1 = door(w.b, 4.5), an = Math.random() * 6.283, rr = 1 + Math.random() * 4.5; w.pot = [d1[0] + Math.cos(an) * rr, d1[1] + Math.sin(an) * rr]; }
+        var qx = w.pot[0] - w.x, qz = w.pot[1] - w.z, qd = Math.hypot(qx, qz), qs = 2.6 * dt;
+        if (qd <= qs || blockedAt(w.pot[0], w.pot[1])) { w.pot = null; w.potT = 2 + Math.random() * 6; } else { w.x += qx / qd * qs; w.z += qz / qd * qs; } }
+      w.m.position.set(w.x, host.groundY(w.x - bs.x, w.z - bs.z), w.z); if (w.m.userData.billboard && host.cameraQuat) w.m.quaternion.copy(host.cameraQuat()); }
     function legTo(w, goal) { var a = anchorAt(w.b.x, w.b.z, 30) || anchors()[0];
       w.leg = paths && a ? paths.route(w.x, w.z, goal[0], goal[1], blockedAt, a.x, a.z, reach(a) + 12) : [goal]; w.k = 0;
       if (paths && w.fresh) paths.tread([[w.x, w.z]].concat(w.leg), 0.2); }                                // (its first round is trodden at once, so the way shows from the start)
     function work(dt) {
       var bs = host.base(), i;
+      // A round: 0 out to the work (trees only), 1 back to its door, 2 across to the workshop, 3 home again; the pile grows by one a round.
+      // A person at a building with no work (a home, a hall, a bank) potters by the door, and now and then strolls to the workshop and
+      // back along the streets, which keeps a street to that door.
       for (i = 0; i < workers.length; i++) { var w = workers[i], b = w.b, job = defs[b.t].job;
-        if (!job) {                                                       // a home, a hall, a bank: its own person potters about by the door
-          if (w.wait > 0) w.wait -= dt; else { if (!w.leg) { var d1 = door(b, 4.5), an = Math.random() * 6.283, rr = 1 + Math.random() * 4.5; w.leg = [[d1[0] + Math.cos(an) * rr, d1[1] + Math.sin(an) * rr]]; }
-            var q = w.leg[0], qx = q[0] - w.x, qz = q[1] - w.z, qd = Math.hypot(qx, qz), qs = 2.6 * dt;
-            if (qd <= qs || blockedAt(q[0], q[1])) { w.leg = null; w.wait = 2 + Math.random() * 6; } else { w.x += qx / qd * qs; w.z += qz / qd * qs; } }
-          w.m.position.set(w.x, host.groundY(w.x - bs.x, w.z - bs.z), w.z); if (w.m.userData.billboard && host.cameraQuat) w.m.quaternion.copy(host.cameraQuat()); continue; }
-        if (w.wait > 0) { w.wait -= dt; w.m.position.y = host.groundY(w.x - bs.x, w.z - bs.z) + Math.abs(Math.sin(w.wait * 9)) * 0.4; continue; }
-        if (!w.leg) { var a = anchorAt(b.x, b.z, 30) || anchors()[0], home = door(b, 2.5), hub = a ? door(a, 3) : home;
-          legTo(w, w.stage === 0 ? workSpot(w, a || b) : w.stage === 2 ? hub : home); }
-        var p = w.leg[w.k], dx = p[0] - w.x, dz = p[1] - w.z, d = Math.hypot(dx, dz), stp = 7 * dt;
+        if (w.wait > 0) { w.wait -= dt; if (job) w.m.position.y = host.groundY(w.x - bs.x, w.z - bs.z) + Math.abs(Math.sin(w.wait * 9)) * 0.4; else potter(w, dt, bs); continue; }
+        if (!w.leg) { var a = anchorAt(b.x, b.z, 30) || anchors()[0], home = door(b, 2.5), hub = a ? door(a, 3) : home, goal = w.stage === 0 ? workSpot(w) : w.stage === 2 ? hub : home;
+          if (!goal) { w.stage = 2; w.wait = 3 + Math.random() * 3; continue; }                              // (its work is at its own building: a while there, then across to the workshop with what it made)
+          w.pot = null; legTo(w, goal); }
+        var p = w.leg[w.k], dx = p[0] - w.x, dz = p[1] - w.z, d = Math.hypot(dx, dz), stp = (job ? 7 : 4.5) * dt;
         if (d <= stp) { w.x = p[0]; w.z = p[1]; w.k++;
-          if (w.k >= w.leg.length) { w.leg = null; w.stage = (w.stage + 1) % 4; w.wait = w.stage === 1 ? 1.4 : 0.6;                    // 0 out to the work, 1 back to its door, 2 across to the workshop, 3 home again
-            if (w.stage === 0) { w.fresh = false; w.trips++; b.stock = Math.min(30, (b.stock || 0) + 1); if (sel === b && box.open && !ghost) pick(b); } } }
+          if (w.k >= w.leg.length) { w.leg = null; w.stage = (w.stage + 1) % 4; w.wait = w.stage === 1 ? 1.4 : 0.6;
+            if (w.stage === 0) { w.fresh = false; w.trips++;
+              if (job) { b.stock = Math.min(30, (b.stock || 0) + 1); if (sel === b && box.open && !ghost) pick(b); } else { w.stage = 2; w.wait = 40 + Math.random() * 50; } } } }
         else { w.x += dx / d * stp; w.z += dz / d * stp; if (paths) paths.walk(w.x, w.z, dt * 0.7); }
         w.m.position.set(w.x, host.groundY(w.x - bs.x, w.z - bs.z) + Math.abs(Math.sin((w.x + w.z) * 0.9)) * 0.3, w.z);
         if (w.m.userData.billboard && host.cameraQuat) w.m.quaternion.copy(host.cameraQuat()); else if (d > 0.01) w.m.rotation.y = Math.atan2(dx, dz); }
@@ -11959,7 +11984,7 @@ try {
         mats.glow.emissiveIntensity = host.night();
         if (f !== fighting) { if (f) { S.builds.forEach(function (b) { if (Math.hypot(b.x - hx, b.z - hz) < 60) hide(b, true); }); workers.forEach(function (w) { w.m.visible = false; }); fighting = true; } else { refresh(); } }   // (refresh puts everything back and clears the mark)
         if (workers.length && !f) work(dt);
-        if (paths) { if (!f && api._hx !== undefined && Math.hypot(hx - api._hx, hz - api._hz) > 0.05 && anchorAt(hx, hz, 24)) paths.walk(hx, hz, dt * 0.6); api._hx = hx; api._hz = hz; paths.tick(dt); }
+        if (paths) paths.tick(dt);                                         // (only the town's walkers wear streets; her own wandering about does not)
         saveIn += dt; if (saveIn > 40 && workers.length) { saveIn = 0; save(); }                           // (the piles and the worn ways are kept now and then)
         if (on && box.open && !ghost && !sel && (api._hd = (api._hd || 0) + dt) > 1) { api._hd = 0; box.sub(header()); }
       }
@@ -12066,8 +12091,10 @@ try {
     function windowsOn(len, cells) { var n = Math.max(1, Math.floor(cells / 3)), out = [], k; for (k = 0; k < n; k++) out.push(-len / 2 + len * (k + 0.5) / n); return out; }
     function wallParts(len, wins, x, z, ry, parts, panes) {              // a wall along its own x, its inner face at local z = 0, built outward (-z)
       var a = ry * Math.PI / 180, c = Math.cos(a), s = Math.sin(a), at = function (lx, ly, lz) { return [x + lx * c + lz * s, ly, z - lx * s + lz * c]; }, k, edges = [-len / 2 - WT];
-      parts.push({ s: 'box', c: 'wall2', d: [len + WT * 2, SILL, WT], p: at(0, 0, -WT / 2), r: [0, ry, 0] });
-      parts.push({ s: 'box', c: 'wall2', d: [len + WT * 2, WH - HEAD, WT], p: at(0, HEAD, -WT / 2), r: [0, ry, 0] });
+      // (no ink round the wall's own pieces: the ink is a slightly bigger copy of a piece, and where three pieces are stacked the copy of the
+      //  top one stood a hair proud of the wall and showed as a dashed line along it at the height of the window tops)
+      parts.push({ s: 'box', c: 'wall2', d: [len + WT * 2, SILL, WT], p: at(0, 0, -WT / 2), r: [0, ry, 0], o: 0 });
+      parts.push({ s: 'box', c: 'wall2', d: [len + WT * 2, WH - HEAD, WT], p: at(0, HEAD, -WT / 2), r: [0, ry, 0], o: 0 });
       wins.forEach(function (w) { edges.push(w - WW / 2, w + WW / 2); }); edges.push(len / 2 + WT);
       for (k = 0; k < edges.length; k += 2) parts.push({ s: 'box', c: 'wall2', d: [edges[k + 1] - edges[k], HEAD - SILL, WT], p: at((edges[k] + edges[k + 1]) / 2, SILL, -WT / 2), r: [0, ry, 0], o: 0 });
       parts.push({ s: 'box', c: 'woodDark', d: [len + WT * 2 + 0.3, 0.35, WT + 0.3], p: at(0, WH, -WT / 2), r: [0, ry, 0], o: 0 });            // the top of the wall, seen from above
@@ -12208,7 +12235,9 @@ try {
       settle(); }
     function tap(cx, cy, touch) { var rr = aim(cx, cy), before = ghost ? JSON.stringify(ghost.it) : '';
       if (ghost) { follow(cx, cy); if (!touch || JSON.stringify(ghost.it) === before) setDown(); return; }                   // on a touch screen the first tap brings it there, the second sets it down
-      var h = ray.intersectObjects(pieces.map(function (p) { return p.userData.body; }))[0], it = h ? h.object.userData.item : null;
+      // decorating, anything can be picked up; walking about, a rug is floor (it used to be taken for a thing to use: a tap on a rug
+      // walked her to its edge and no further, and the mat by the door could not be tapped through one)
+      var h = ray.intersectObjects(pieces.filter(function (p) { return deco || !defs[p.userData.item.id].rug; }).map(function (p) { return p.userData.body; }))[0], it = h ? h.object.userData.item : null;
       if (deco) { if (it) ghostOf(it.id, it); return; }
       var f = onFloor(rr); if (it) { useThing(it); return; }
       if (f) { if (Math.hypot(f[0] - R.doorAt[0], f[1] - R.doorAt[1]) < 2.4) { walk(R.doorAt[0], R.doorAt[1], leave); return; }                    // a tap on the mat by the door: out she goes
@@ -12235,7 +12264,8 @@ try {
       if (ghost) settle(); else box.msg('Pick a thing, then tap the floor. Tap a thing in the room to pick it up.');
       box.foot(ghost ? [{ label: 'Turn', fn: turn, off: !!ghost.def.wall }, { label: 'Set down', go: true, fn: setDown }, { label: ghost.from ? 'Put away' : 'Cancel', fn: putAway }] : [{ label: 'Done', go: true, fn: function () { api.decorate(false); } }, { label: 'Step outside', fn: leave }]);
     }
-    function leave() { if (!R) return; var b = R.b; dropGhost(); listeners.forEach(function (l) { l[0].removeEventListener(l[1], l[2], true); }); listeners = []; box.hide(); api.on = false; R = null; if (host.left) host.left(b); }
+    function leave() { if (!R) return; var b = R.b; listeners.forEach(function (l) { l[0].removeEventListener(l[1], l[2], true); }); listeners = []; api.on = false; R = null;      // (first what frees her: from here she is out, whatever else goes wrong)
+      try { dropGhost(); box.hide(); } finally { if (host.left) host.left(b); } }
     function listen(target, type, fn) { target.addEventListener(type, fn, true); listeners.push([target, type, fn]); }
 
     api = {
@@ -12269,7 +12299,9 @@ try {
       frame: function (dt) {
         if (!R) return; var day = host.day ? host.day() : 1;
         hemi.intensity = 0.34 + 0.28 * day; sun.intensity = 0.16 + 0.26 * day; lamp.intensity = 0.25 + 0.5 * (1 - day); mats.glow.emissiveIntensity = 0.35 + 0.65 * (1 - day);
-        if (path.length) { var n = path[0], dx = n[0] - pawnAt[0], dz = n[1] - pawnAt[1], d = Math.hypot(dx, dz), stp = 7.5 * dt; if (d <= stp) { pawnAt = [n[0], n[1]]; path.shift(); if (!path.length && path.then) { var f = path.then; path.then = null; f(); } } else { pawnAt[0] += dx / d * stp; pawnAt[1] += dz / d * stp; if (pawn) pawn.userData.faceLeft = dx < 0; } }
+        // (a walk can end with her stepping out by the mat: then the room is gone and there is nothing more to do this frame.
+        //  Without that check the frame went on to read the room, threw, and stopped the whole game: Blu, Oct 12, "I'm trapped inside the building.")
+        if (path.length) { var n = path[0], dx = n[0] - pawnAt[0], dz = n[1] - pawnAt[1], d = Math.hypot(dx, dz), stp = 7.5 * dt; if (d <= stp) { pawnAt = [n[0], n[1]]; path.shift(); if (!path.length && path.then) { var f = path.then; path.then = null; f(); if (!R) return; } } else { pawnAt[0] += dx / d * stp; pawnAt[1] += dz / d * stp; if (pawn) pawn.userData.faceLeft = dx < 0; } }
         if (!deco) liveView(dt, false);
         // her picture is a flat card turned to the camera, so it is kept its own half-width off the walls, or a wall would cut it
         if (pawn) { pawn.position.set(Math.max(-R.W / 2 + 1.7, Math.min(R.W / 2 - 1.7, pawnAt[0])), 0, Math.max(-R.D / 2 + 1.7, Math.min(R.D / 2 - 1.7, pawnAt[1]))); pawn.visible = !deco; if (pawn.userData.billboard) pawn.quaternion.copy(cam.quaternion); }
@@ -12354,8 +12386,12 @@ const twbHost = {
     g.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: map || null, color: map ? 0xffffff : 0x57b394, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide }))); g.userData.billboard = true; return g; },
   cameraQuat: () => camera.quaternion,
   store: { get: () => { const s = localStorage.getItem(TWB_KEY); return s ? JSON.parse(s) : null; }, set: o => localStorage.setItem(TWB_KEY, JSON.stringify(o)) },
-  // the photograph for a room's windows: six small pictures of the world taken from where the building stands
-  pano: (x, y, z) => { if (!twbCube){ twbCubeRT = new THREE.WebGLCubeRenderTarget(512); twbCube = new THREE.CubeCamera(1, 2400, twbCubeRT); }
+  // The photograph for a room's windows: six pictures of the world taken from where the building stands. It has to be sharp enough to
+  // be looked at through a window from across a room (Blu, Oct 12: "it's really bad quality, the windows. I have artifacting"; it was
+  // 512 dots a side, shown about three times its size): 2048 dots a side on a computer, 1024 on a phone or a tablet, with smaller
+  // copies made of it so that it is smooth when it is seen small. It is let go when she steps outside (see left, below).
+  pano: (x, y, z) => { if (!twbCube){ const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches, size = Math.min(coarse ? 1024 : 2048, renderer.capabilities.maxCubemapSize || 1024);
+      twbCubeRT = new THREE.WebGLCubeRenderTarget(size, { generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter }); twbCube = new THREE.CubeCamera(1, 2400, twbCubeRT); }
     const v = hero.mesh.visible; hero.mesh.visible = false; twbCube.position.set(x, y, z); twbCube.update(renderer, scene); hero.mesh.visible = v; return twbCubeRT.texture; },
   nearTree: (x, z, r) => { let best = null, bd = r*r; for (const t of W.trees){ if (t.gone || t.stump) continue; const d = (t.x - x)**2 + (t.z - z)**2; if (d < bd){ bd = d; best = t; } } return best; },
   // the game blocks walking with upright boxes in the window's own feet; they are shifted with everything else when it re-centres
@@ -12390,7 +12426,13 @@ const twbHost = {
       setTimeout(() => { try { if (twbRoom.on) twbTown.photo(twbRoom.room.b); } catch (e){ console.warn('no new photograph for the windows', e); } toast('Slept right through. It is morning.'); }, reduceMotion ? 80 : 620); return true; }
     if (kind === 'cook'){ if (have('bean') < 3){ toast('Bring three moonbeans and you can cook a stew here.'); return true; } cookAtStove(); toast('Moonbean stew, bubbling away.'); return true; }
     return false; },
-  left: b => { const bx = document.getElementById('twBox'); if (bx) bx.style.visibility = ''; fadeThen(() => { const d = twbTown.door(b, 4), bs = W.base; hero.x = d[0] - bs.x; hero.z = d[1] - bs.z; hero.y = stepAt(hero.x, hero.z); hero.target = null; hero.pending = null; twbBusy = false; if (ui.tool === 'tee') twbTown.open(); }); }
+  // Stepping outside: she comes out where she stood when she went in (she could stand there). If she went in from far off (the page's
+  // "Go inside"), she comes out in front of the door, at the first spot there that is not in a wall or in water.
+  left: b => { const bx = document.getElementById('twBox'); if (bx) bx.style.visibility = ''; fadeThen(() => { const bs = W.base, d3 = twbTown.door(b, 3); let p = null;
+      if (twbFrom && Math.hypot(twbFrom.x - d3[0], twbFrom.z - d3[1]) < 10) p = [twbFrom.x - bs.x, twbFrom.z - bs.z];
+      if (!p) for (const out of [4, 3, 5.5, 2.2]){ const d = twbTown.door(b, out); if (!twbShut(d[0] - bs.x, d[1] - bs.z)){ p = [d[0] - bs.x, d[1] - bs.z]; break; } }
+      if (!p) p = twbFrom ? [twbFrom.x - bs.x, twbFrom.z - bs.z] : [d3[0] - bs.x, d3[1] - bs.z];
+      hero.x = p[0]; hero.z = p[1]; hero.y = stepAt(hero.x, hero.z); hero.target = null; hero.pending = null; twbBusy = false; twbFrom = null; if (twbCubeRT){ twbCubeRT.dispose(); twbCubeRT = twbCube = null; } if (ui.tool === 'tee') twbTown.open(); }); }
 };
 { const st = document.createElement('style'); st.textContent = 'body.twhud #twBox{bottom:calc(var(--twBotH,132px) + 76px + env(safe-area-inset-bottom,0px))}body.twhud #twBox.small{bottom:auto}'; document.head.appendChild(st); }      // (clear of the debug button and the speed line that sit above the bar)
 function twbLandChanged(x, z, R){ for (const ch of chunksTouching(Math.round(gx(x)), Math.round(gx(z)), Math.ceil(R/CELL) + 2)) buildTerrain(ch); fillHeightTex(W.htex); if (spiritsReady) clearTufts(x, z, R); }      // (the land is drawn again where it changed, as the shovel does)
@@ -12399,14 +12441,34 @@ twbRoom.onChange = () => twbTown.save();
 function twbGoIn(b){
   if (twbBusy || twbRoom.on || battle.on || inside.on) return;
   if (typeof ghostOut === 'function' && ghostOut()){ ghostNo('go inside'); return; }
-  twbBusy = true; hero.target = null; hero.pending = null;
+  twbBusy = true; hero.target = null; hero.pending = null; twbFrom = { x: hero.x + W.base.x, z: hero.z + W.base.z };      // (where she stands as she goes in, in world feet: she comes out there)
   fadeThen(() => { let tx = null; try { tx = twbTown.photo(b); } catch (e){ console.warn('no photograph for the windows', e); }
     twbTown.close(); twbRoom.enter(b, tx, ui.tool === 'tee'); $('prompt').style.display = 'none'; });
 }
 twbTown.onEnter = twbGoIn;
 let twbLoaded = false;
+/* A FAULT HERE MUST NEVER STOP THE GAME. The game asks for its next frame at the END of its own frame, so anything thrown inside a
+   frame stops it for good. On Oct 12 a room's frame threw as she stepped out by the mat, and Blu was "trapped inside the building.
+   Cannot go anywhere." So the calls the game makes into the build mechanic every frame are fenced: a fault is written to the console,
+   she is told once, that part is switched off until the page is loaded again, and the game goes on. */
+let twbTownOff = false, twbRoomOff = false;
+let twbFrom = null, twbFreeIn = 0;
+const twbShut = (x, z) => wetAt(x, z) || (W.colliders || []).some(c => x > c.x0 - 0.5 && x < c.x1 + 0.5 && z > c.z0 - 0.5 && z < c.z1 + 0.5);
+// SHE IS NEVER LEFT INSIDE A WALL. The game will not let her take a step that ends inside a wall, so if she is ever inside one of
+// her buildings' walls (a save from before the doors were kept clear; a building set down round her) no step is allowed and she is
+// stuck for good. Twice a second: if she is inside one, she is set down just outside its nearest side.
+function twbFree(){
+  let moved = false;
+  for (let n = 0; n < 6; n++){ const c = twbCols.find(c => hero.x > c.x0 && hero.x < c.x1 && hero.z > c.z0 && hero.z < c.z1); if (!c) break;
+    const d = [hero.x - c.x0, c.x1 - hero.x, hero.z - c.z0, c.z1 - hero.z], k = d.indexOf(Math.min(d[0], d[1], d[2], d[3]));
+    if (k === 0) hero.x = c.x0 - 0.7; else if (k === 1) hero.x = c.x1 + 0.7; else if (k === 2) hero.z = c.z0 - 0.7; else hero.z = c.z1 + 0.7; moved = true; }
+  if (moved){ hero.y = stepAt(hero.x, hero.z); hero.target = null; hero.pending = null; }
+  return moved;
+}
+function twbFault(what, e){ console.error('the build mechanic: ' + what, e); toast(what + ' The game goes on. Load the page again to bring it back.'); }
 window.TWBuild = {
   town: twbTown, room: twbRoom, data: TWB_DATA, creatures: () => twbHost.creatures(), creatureNote: () => twbHost.creatureNote(),
+  photoSize: () => twbCubeRT ? [twbCubeRT.width, !!twbCubeRT.texture.generateMipmaps] : null,      // (how big the windows' photograph is: for the check)
   // the tool in hand changed (the game's setTool)
   tool: t => { if (twbRoom.on){ twbRoom.decorate(t === 'tee'); return; } if (t === 'tee') twbTown.open(); else if (twbTown.on) twbTown.close(); },
   key: e => !twbRoom.on && ui.tool === 'tee' && twbTown.key(e),
@@ -12420,12 +12482,19 @@ window.TWBuild = {
   arrive: n => { const b = twbTown.state.builds.filter(o => o.n === n)[0], bs = W.base; if (!b) return; const d = twbTown.door(b, 3); if (Math.hypot(d[0] - bs.x - hero.x, d[1] - bs.z - hero.z) < 9) twbGoIn(b); else toast("Can't reach that door from here."); },
   use: () => { if (twbRoom.on) return true; const b = twbTown.near(hero.x, hero.z); if (!b) return false; twbGoIn(b); return true; },
   prompt: () => { const b = twbTown.near(hero.x, hero.z); return b ? 'E: go inside the ' + twbTown.defs[b.t].name.toLowerCase() : ''; },
-  frame: dt => { if (!twbLoaded && W && W.pack){ twbLoaded = true; twbTown.load(); if (ui.tool === 'tee') twbTown.open(); }
-    twbTown.frame(dt); if (twbWant.length && W.colliders && W.colliders.indexOf(twbCols[0]) < 0) twbHost.colliders(twbWant); },
+  frame: dt => { if (twbTownOff) return;
+    try { if (!twbLoaded && W && W.pack){ twbLoaded = true; twbTown.load(); if (ui.tool === 'tee') twbTown.open(); }
+      twbTown.frame(dt); if (twbWant.length && W.colliders && W.colliders.indexOf(twbCols[0]) < 0) twbHost.colliders(twbWant);
+      if ((twbFreeIn -= dt) < 0){ twbFreeIn = 0.5; if (!twbRoom.on && !twbBusy && !inside.on && !battle.on && !hero.boating) twbFree(); } }
+    catch (e){ twbTownOff = true; twbFault('The town stopped working.', e); } },
   // the game is about to take (true) or has just taken (false) the photograph a fight is played in front of
-  shoot: (yes, x, z) => { if (twbLoaded) twbTown.shoot(yes, x, z); },
+  shoot: (yes, x, z) => { if (!twbLoaded || twbTownOff) return; try { twbTown.shoot(yes, x, z); } catch (e){ console.error('the build mechanic: the town could not step out of the fight\'s photograph', e); } },
   // while she is in a room the world stands still and the room is what is drawn
-  roomFrame: dt => { if (!twbRoom.on) return false; twbRoom.frame(dt); renderer.render(twbRoom.scene, twbRoom.camera);
+  roomFrame: dt => { if (!twbRoom.on || twbRoomOff) return false;
+    try { twbRoom.frame(dt); if (!twbRoom.on) return false; renderer.render(twbRoom.scene, twbRoom.camera); }      // (she may have stepped out during that frame: then the world is drawn)
+    catch (e){ twbFault('Something went wrong in that room, so you are back outside.', e);
+      try { twbRoom.leave(); } catch (e2){ twbRoomOff = true; twbBusy = false; console.error('the build mechanic: she could not be stepped out of the room', e2); }
+      return false; }
     const bx = document.getElementById('twBox'); if (bx) bx.style.visibility = twbHost.busy() ? 'hidden' : '';      // (the bag or the recipe book is open over the room: the box steps aside)
     return true; }
 };

@@ -11165,7 +11165,7 @@ requestAnimationFrame(frame);
   function applyState(id, d){
     if (W.sw) d = { ...d, x: d.x - W.base.x, z: d.z - W.base.z };      // friends say where they are in the world
     const o = getOther(id, d);
-    o.tx = d.x; o.ty = d.y; o.tz = d.z; o.w.faceLeft = !!d.f; o.w.moveAmt = d.m || 0; o.w.mode = d.md || 'waddle'; o.hidden = !!d.h;
+    o.seen = performance.now(); o.tx = d.x; o.ty = d.y; o.tz = d.z; o.w.faceLeft = !!d.f; o.w.moveAmt = d.m || 0; o.w.mode = d.md || 'waddle'; o.hidden = !!d.h;
     if (typeof d.p === 'number') o.w.phase = d.p;
   }
   function myState(){
@@ -11225,6 +11225,7 @@ requestAnimationFrame(frame);
     renderList();
   }
   (async () => {
+    if (navigator.webdriver){ status('Friends are off: this is an automated test run.', true); btn.textContent = 'Friends'; return; }      // (Oct 14: test runs had joined the real lobby, and each showed up in Blu's world as a frog)
     try {
       const lib = await import(TRYSTERO);
       MP.myColor = colorFor(lib.selfId);
@@ -11236,6 +11237,7 @@ requestAnimationFrame(frame);
     }
   })();
   window.addEventListener('beforeunload', () => { try { MP.room && MP.room.leave(); } catch(e){} });
+  setInterval(() => { const now = performance.now(); for (const [id, o] of [...MP.others]) if (now - (o.seen || now) > 30000) dropOther(id); }, 5000);      // (Oct 14: a page that was closed or killed without saying goodbye left its frog behind for good)
 })();
 
 /* ---------- UI LIGHT (Blu, Sept 26): the HUD is lit by the place you're in, not a colour swap ----------

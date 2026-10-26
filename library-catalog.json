@@ -28,6 +28,13 @@
       "locked": false
     },
     {
+      "title": "Spirit Striker’s Marketing Map",
+      "pdf": "books/spirit-strikers-marketing-map.pdf",
+      "cover": "library-assets/spirit-strikers-marketing-map.png",
+      "locked": false,
+      "reader": "marketing-map.html"
+    },
+    {
       "title": "Dreamer Frog — Compendium of Toga",
       "pdf": "books/dreamer-frog-compendium.pdf",
       "cover": "library-assets/dreamer-frog.jpg",

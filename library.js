@@ -26,6 +26,13 @@
   document.querySelectorAll('[data-pdf]').forEach(button => button.addEventListener('click', () => {
     if (button.dataset.locked === 'true') { window.open('https://spiritstriker.app/library.html', '_blank', 'noopener'); return; }
     returnFocus = button;
+    if (button.dataset.reader) {
+      const page = new URL(button.dataset.reader, location.href).href;
+      title.textContent = button.dataset.title; external.href = page;
+      frame.src = page; reader.hidden = false; document.body.classList.add('reading');
+      document.getElementById('close-reader').focus();
+      return;
+    }
     const url = new URL('https://spiritstriker.app/flipbook.html');
     url.searchParams.set('pdf', button.dataset.pdf);
     url.searchParams.set('title', button.dataset.title);

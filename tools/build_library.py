@@ -1,5 +1,5 @@
 from pathlib import Path
-import json,html
+import hashlib,json,html
 root=Path(__file__).resolve().parents[1]
 data=json.loads((root/'library-catalog.json').read_text())
 h=lambda s: html.escape(s,quote=True)
@@ -8,7 +8,7 @@ software='\n'.join(f'''<article class="disc-entry"><img class="case-art" src="li
 projects='\n'.join(f'''<a class="project" href="{h(p['url'])}" {'target="_blank" rel="noopener noreferrer"' if p['url'].startswith('https:') else ''}><strong>{h(p['title'])}</strong><span>{h(p['description'])}</span></a>''' for p in data['projects'])
 (root/'library.html').write_text(f'''<!doctype html>
 <!-- Prepared by: Codex. GitHub Pages collection for Spirit Striker. -->
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Library | Spirit Striker</title><link rel="stylesheet" href="library.css?v=1"><script src="library.js?v=1" defer></script></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Library | Spirit Striker</title><link rel="stylesheet" href="library.css?v=1"><script src="library.js?v={hashlib.sha256((root/'library.js').read_bytes()).hexdigest()[:10]}" defer></script></head>
 <body><header class="mast"><a class="back" href="menu.html" id="back-menu">← Main menu</a><div class="identity"><span class="small">Spirit Striker / Terrace World</span><h1>Library</h1><p>Books, recovered software, and working maps of the world.</p></div><nav class="sections" aria-label="Library sections"><a href="#books" data-section="books">Books <span>{len(data['books'])}</span></a><a href="#software" data-section="software">Software <span>{len(data['software'])}</span></a><a href="#world" data-section="world">World &amp; planners</a></nav></header>
 <main><section id="books" class="collection" aria-labelledby="books-title"><div class="section-heading"><h2 id="books-title">The books</h2><p>Original covers. Open a book to read it.</p></div><div class="book-grid">{books}</div></section>
 <section id="software" class="collection" aria-labelledby="software-title"><div class="section-heading"><h2 id="software-title">Recovered software</h2><p>CD cases and discs from the original collection. Source links point to the public repositories; web tools open where available.</p></div><div class="disc-list">{software}</div></section>

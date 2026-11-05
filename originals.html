@@ -1,0 +1,56 @@
+<!doctype html>
+<!-- The Originals: Blu's hand-drawn Spirit Striker cards, shown as they are (read-only source art). -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>The Originals | Spirit Striker</title>
+  <meta name="description" content="Blu's 29 original Spirit Striker drawings, in line and in their flat colours.">
+  <meta name="theme-color" content="#0c1220">
+  <link rel="icon" href="images/striker-symbol-gold.png">
+  <link rel="stylesheet" href="originals.css?v=1">
+  <script type="module" src="originals.js?v=1"></script>
+</head>
+<body>
+  <header class="mast">
+    <a class="back" href="library.html" id="back-link">← Library</a>
+    <div class="identity">
+      <img class="wordmark" src="images/brand/spirit-striker-wordmark-original-letter-shapes-v11.png" alt="Spirit Striker">
+      <h1>The Originals</h1>
+      <p>Twenty-nine drawings by Blu, the first pages of the Spirit Striker world. The same cards fly through the opening's portal.</p>
+    </div>
+    <div class="controls" role="group" aria-label="How to show the drawings">
+      <button type="button" data-mode="line" aria-pressed="true">Line</button>
+      <button type="button" data-mode="colour" aria-pressed="false">Colour</button>
+    </div>
+  </header>
+
+  <main>
+    <ol class="plates" id="plates" aria-label="Original drawings"></ol>
+    <figure class="signature">
+      <img src="assets/intro-originals-v2/designed-by-blu-caption-below.png" alt="Designed by Blu Inman" loading="lazy">
+    </figure>
+  </main>
+
+  <footer class="foot">
+    <a href="opening/">Watch the opening</a>
+    <a href="menu.html">Main menu</a>
+    <a href="terrace-world.html">Play Terrace World</a>
+  </footer>
+
+  <dialog id="viewer" aria-labelledby="viewer-title">
+    <div class="viewer-bar">
+      <strong id="viewer-title"></strong>
+      <span id="viewer-count" aria-live="polite"></span>
+      <button type="button" id="viewer-close" aria-label="Close">✕</button>
+    </div>
+    <div class="viewer-stage">
+      <button type="button" class="step prev" id="viewer-prev" aria-label="Previous drawing">‹</button>
+      <div class="viewer-plate" id="viewer-plate"></div>
+      <button type="button" class="step next" id="viewer-next" aria-label="Next drawing">›</button>
+    </div>
+  </dialog>
+
+  <noscript><p class="noscript">The drawings need JavaScript to lay out. They are in <code>assets/intro-originals-v2/</code>.</p></noscript>
+</body>
+</html>

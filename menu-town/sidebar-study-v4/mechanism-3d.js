@@ -590,7 +590,7 @@ function updateSignPlacement(){
 }
 function setTownScene(){
   if(!camera)return;const town=townControl.checked;document.body.classList.toggle('town-view',town);post.visible=town;environment.group.visible=town;
-  camera=town?townCamera:studioCamera;scene.background=null;MT?.setPaused(!town);
+  camera=town?townCamera:studioCamera;scene.background=null;MT?.setPaused?.(!town);
   hideControl.disabled=!town;document.querySelector('#capture-plate').disabled=!town;
   scene.getObjectByName('sign-ground-shadow').visible=town;
   if(town)svg.setAttribute('preserveAspectRatio','none');else svg.removeAttribute('preserveAspectRatio');
@@ -614,7 +614,7 @@ function advance(dt){
   uiTime+=dt;bandHover.forEach((v,i)=>{bandHover[i]+=((i===hoverBand&&!active&&!returnMotion?1:0)-v)*Math.min(1,dt*9);});
   cinema.update(dt);
   if(scenePlaying())worldTime+=dt;
-  MT?.setResting(townControl.checked&&scenePlaying()&&!cinema.getState().mode);
+  MT?.setResting?.(townControl.checked&&scenePlaying()&&!cinema.getState().mode);
   if(returnMotion){
     returnMotion.time+=dt;globeTime+=dt;
     if(returnMotion.time>=returnMotion.globeDuration+1.57){returnMotion=null;active=false;cycleTime=0;lastHitView=null;}
@@ -629,7 +629,7 @@ function advance(dt){
   pose();
 }
 function tick(now){raf=0;const dt=Math.max(0,(now-last)/1000);last=now;if(!paused&&visibleFrame())advance(dt);if(ready&&!paused&&visibleFrame()&&animationWanted())raf=requestAnimationFrame(tick);}
-function run(){cancelAnimationFrame(raf);last=performance.now();raf=0;MT?.setPaused(!(visibleFrame()&&townControl.checked));townFilm?.setPlaying(filmActive()&&!paused&&visibleFrame()&&scenePlaying());if(portalVideo){if(!paused&&visibleFrame()&&(active||idleAllowed()))portalVideo.play().then(()=>{portalPlaybackError='';}).catch(e=>{portalPlaybackError=e.message;});else portalVideo.pause();}if(ready&&visibleFrame()){if(needsRender)pose();if(!paused)raf=requestAnimationFrame(tick);}}
+function run(){cancelAnimationFrame(raf);last=performance.now();raf=0;MT?.setPaused?.(!(visibleFrame()&&townControl.checked));townFilm?.setPlaying(filmActive()&&!paused&&visibleFrame()&&scenePlaying());if(portalVideo){if(!paused&&visibleFrame()&&(active||idleAllowed()))portalVideo.play().then(()=>{portalPlaybackError='';}).catch(e=>{portalPlaybackError=e.message;});else portalVideo.pause();}if(ready&&visibleFrame()){if(needsRender)pose();if(!paused)raf=requestAnimationFrame(tick);}}
 function fallback(message){
   loadSerial++;cancelAnimationFrame(raf);raf=0;ready=false;active=false;phase='menu';portalVideo?.pause();
   document.body.classList.remove('town-view');menu.classList.remove('scene-ready','study-open');menu.style.pointerEvents='';svg.removeAttribute('preserveAspectRatio');
@@ -689,7 +689,7 @@ window.SIDEBAR_STUDY={
     gears:rotors.map(r=>r.object.rotation.z),windmill:fan?.rotation.z,rearWindmill:rearFan?.rotation.z,motorY:motorMount?.position.y,motorScale:motorMount?.scale.toArray(),
     settings:{...settings},autoCycle:autoControl.checked,cinema:cinema.getState(),schedule:schedule(),rendering:!!raf,width:menu.getBoundingClientRect().width,signBounds,traffic:traffic?.getState(),environment:environment?.getState(),
     camera:camera?.isPerspectiveCamera?{position:camera.position.toArray(),matrix:camera.matrixWorld.toArray(),projection:camera.projectionMatrix.toArray(),aspect:camera.aspect,view:camera.view?{...camera.view}:null}:null,sky:sky?.getState(),film:townFilm?.getState(),footing:footing?.getState(),sceneMotion:sceneMotion.checked,embeddedMenu,parentVisible,backdrop:backdropControl.value,attachment:embeddedMenu?'native-town-v13':'school-life-v11'}),
-  ambient:{trigger:(k,at)=>{MT?.trigger(k,at);run();},state:()=>MT?.state()},
+  ambient:{trigger:(k,at)=>{MT?.trigger?.(k,at);run();},state:()=>MT?.state?.()},
   cinema:{shots:()=>cinema.SHOTS,still:(n,u)=>cinema.still(n,u),tour:()=>{cinema.tour();run();},release:()=>cinema.release(),arrive:()=>{cinema.arrive();run();}},
   capture:({hideSign=false,hideTraffic=false,greenSky=false,width=1800,height=1200}={})=>{
     const size=renderer.getSize(new THREE.Vector2()),ratio=renderer.getPixelRatio();
@@ -729,7 +729,7 @@ const cinema=(()=>{
   function signShown(on){if(!renderer)return;const c=renderer.domElement;c.style.transition='opacity .4s ease';c.style.opacity=on?'1':'0';menu.style.pointerEvents=on?(hideControl.checked?'none':''):'none';}
   // a tall phone screen keeps the same shot by opening the lens until the width fits
   const lens=v=>{const a=innerWidth/Math.max(1,innerHeight),h=2*Math.atan(Math.tan(v*Math.PI/360)*Math.max(a,.8));return Math.max(v,2*Math.atan(Math.tan(h/2)/a)*180/Math.PI);};
-  const send=(pos,look,fov,view=null)=>MT?.setCamera({pos,look,fov,view});
+  const send=(pos,look,fov,view=null)=>MT?.setCamera?.({pos,look,fov,view});
   function sendBase(){if(!townCamera||!environment)return;const v=townCamera.view;send(environment.base.pos,environment.base.look,townCamera.fov,v&&v.enabled?{fullWidth:v.fullWidth,fullHeight:v.fullHeight,offsetX:v.offsetX,offsetY:v.offsetY,width:v.width,height:v.height}:null);}
   function place(name,u){const S=SHOTS[name],e=u*u*(3-2*u)*.6+u*.4;send(mix3(S[0],S[1],e),mix3(S[2],S[3],e),lens(name==='school'?44:48));}
   function startShot(name){shot=name;t=0;if(name==='ufo')MT?.ufoShot?.([816,184],42,SHOT_LEN);}

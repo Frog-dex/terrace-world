@@ -17,9 +17,10 @@
       scrubArea:{n:520,x0:452,x1:504,y0:364,y1:430,road:5.5,keep:[[485.6,372.8,3.4]]}};   // desert scrub on the lot; clear where the sign stands
     window.__MENU_TOWN.pos=window.__MENU_TOWN.base.pos;window.__MENU_TOWN.look=window.__MENU_TOWN.base.look;
   </script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
+  <!-- If the CDN cannot be reached the town is marked failed, so the sign and menu still come up on their own. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer onerror="window.__MENU_TOWN.failed='three.js did not load'"></script>
   <script src="../town/town-engine.js?v=2" defer></script>
-  <script type="module" src="mechanism-3d.js?v=opening-town-1"></script>
+  <script type="module" src="mechanism-3d.js?v=opening-town-2"></script>
 </head>
 <body>
   <main>

@@ -146,8 +146,13 @@
 
   function openPage(link) {
     if(!link)return;
-    if(!['play','intro','learn'].includes(link.dataset.destination))return; // The GitHub Library is live; other sections stay closed.
-    if(link.dataset.destination==='radio'){location.href=RADIO_SITE;return;}
+    // Radio is Wise Rock Fish's own site (see the dial's note). It used to sit after the
+    // closed-section check below, so the Radio choice silently did nothing.
+    if(link.dataset.destination==='radio'){window.open(RADIO_SITE,'_blank','noopener');return;}
+    if(!['play','intro','learn'].includes(link.dataset.destination)){ // The GitHub Library is live; Shop stays closed.
+      note.textContent=link.getAttribute('aria-label')+' is closed in this copy.';
+      return;
+    }
     sourceLink = link;
     pendingDestination = link.dataset.destination;
     frame=pendingDestination==='radio'?radioFrame:contentFrame;
